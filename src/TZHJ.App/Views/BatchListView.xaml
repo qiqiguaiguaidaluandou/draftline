@@ -46,14 +46,15 @@
             BorderBrush="{StaticResource Border1}" BorderThickness="1" SnapsToDevicePixels="True">
       <DataGrid b:CornerClip.Radius="10" BorderThickness="0" ItemsSource="{Binding Batches}" IsReadOnly="True">
       <DataGrid.Columns>
-        <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="220" />
-        <DataGridTextColumn Header="本地文件夹" Binding="{Binding FolderName}" Width="*" />
+        <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="*" MinWidth="190" />
+        <!-- 本地文件夹：Auto 按内容自适应，文件夹名完整显示，不截断 -->
+        <DataGridTextColumn Header="本地文件夹" Binding="{Binding FolderName}" Width="Auto" MinWidth="150" />
         <DataGridTextColumn Header="物料数" Binding="{Binding MaterialCount}" Width="80" />
         <DataGridTextColumn Header="进度 / 统计" Binding="{Binding ProgressText}" Width="140" />
         <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="90" />
         <DataGridTextColumn Header="拉取" Binding="{Binding FetchedText}" Width="100" />
         <DataGridTextColumn Header="完成" Binding="{Binding SubmittedText}" Width="100" />
-        <DataGridTemplateColumn Header="操作" Width="170">
+        <DataGridTemplateColumn Header="操作" Width="150">
           <DataGridTemplateColumn.CellTemplate>
             <DataTemplate>
               <StackPanel Orientation="Horizontal">
