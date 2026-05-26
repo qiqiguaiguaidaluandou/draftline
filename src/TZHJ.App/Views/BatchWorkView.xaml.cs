@@ -68,6 +68,7 @@ public partial class BatchWorkView : UserControl
         {
             var box = new FrameworkElementFactory(typeof(TextBox));
             box.SetValue(FrameworkElement.MarginProperty, new Thickness(2, 4, 2, 4));
+            box.SetValue(Control.PaddingProperty, new Thickness(6, 3, 6, 3)); // 收紧内边距，给数值更多可见宽度
             box.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
             box.SetBinding(TextBox.TextProperty, new Binding($"[{f.Key}]")
             {
@@ -78,7 +79,7 @@ public partial class BatchWorkView : UserControl
             {
                 Header = f.DisplayName,
                 CellTemplate = new DataTemplate { VisualTree = box },
-                Width = 120,
+                Width = 160,
             };
         }
 
