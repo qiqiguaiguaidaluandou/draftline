@@ -25,7 +25,7 @@ public partial class BatchWorkView : UserControl
         }
     }
 
-    /// <summary>列由字段 schema 驱动：只读字段 / 手填文本 / 手填下拉 + 图纸 + 行状态 + 操作。</summary>
+    /// <summary>列由字段 schema 驱动：只读字段 / 手填文本 / 手填下拉 + 行状态 + 操作（图纸不在表单内展示，到文件夹查看）。</summary>
     private void BuildColumns(BatchWorkViewModel vm)
     {
         Grid.Columns.Clear();
@@ -33,7 +33,6 @@ public partial class BatchWorkView : UserControl
         foreach (var f in vm.Fields.OrderBy(x => x.Order))
             Grid.Columns.Add(BuildFieldColumn(f, vm.IsReadOnly));
 
-        Grid.Columns.Add(ReadOnlyColumn("图纸", nameof(RowViewModel.DrawingText), 90));
         Grid.Columns.Add(ReadOnlyColumn("行状态", nameof(RowViewModel.StatusText), 90));
         Grid.Columns.Add(ReadOnlyColumn("异常原因", nameof(RowViewModel.ExceptionReason), 120));
 

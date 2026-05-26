@@ -10,11 +10,36 @@ namespace TZHJ.App.Views;
 
 public partial class ShellWindow : Window
 {
+    private readonly IDialogService _dialog;
+
     public ShellWindow(ShellViewModel vm, IDialogService dialog)
     {
         InitializeComponent();
         DataContext = vm;
+        _dialog = dialog;
         dialog.ToastRequested += ShowToast;
+    }
+
+    /// <summary>更改密码（占位）：校验通过后提示由 DHR 统一管理、接口接入后生效。</summary>
+    private void OnChangePassword(object sender, RoutedEventArgs e)
+    {
+        AccountToggle.IsChecked = false;
+        var dlg = new ChangePasswordWindow { Owner = this };
+        if (dlg.ShowDialog() == true)
+            _dialog.Info("密码由 DHR 统一管理，接口接入后生效。");
+    }
+
+    /// <summary>退出登录：确认后重启进程回到登录界面（会话为单例，重启最稳妥）。</summary>
+    private void OnLogout(object sender, RoutedEventArgs e)
+    {
+        AccountToggle.IsChecked = false;
+        if (!_dialog.Confirm("退出登录", "确定退出当前账号并返回登录界面？"))
+            return;
+
+        var exe = System.Environment.ProcessPath;
+        if (exe is not null)
+            System.Diagnostics.Process.Start(exe);
+        Application.Current.Shutdown();
     }
 
     /// <summary>底部非阻塞 Toast：成功=绿 / 出错=红 / 普通=深色，2.8s 后淡出移除。</summary>

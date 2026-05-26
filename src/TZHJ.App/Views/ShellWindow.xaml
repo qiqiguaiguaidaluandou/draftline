@@ -20,8 +20,79 @@
                        Foreground="{StaticResource Accent}" VerticalAlignment="Center" />
         <TextBlock DockPanel.Dock="Left" Text="图纸核价 / 挑图纸系统" FontSize="14" FontWeight="SemiBold"
                    Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
-        <TextBlock DockPanel.Dock="Right" Text="{Binding OperatorDisplay}"
-                   Foreground="{StaticResource TextMuted}" FontSize="12" VerticalAlignment="Center" />
+        <!-- 右上角账户菜单：个人资料 + 更改密码 + 退出登录 -->
+        <Grid DockPanel.Dock="Right" VerticalAlignment="Center">
+          <ToggleButton x:Name="AccountToggle" Style="{StaticResource AccountChip}">
+            <StackPanel Orientation="Horizontal">
+              <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource Accent}">
+                <TextBlock Text="{Binding Avatar}" Foreground="White" FontSize="13" FontWeight="SemiBold"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <TextBlock Text="{Binding UserName}" Margin="9,0,5,0" VerticalAlignment="Center"
+                         Foreground="{StaticResource TextBrush}" FontSize="13" />
+              <fi:SymbolIcon Symbol="ChevronDown" FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" />
+            </StackPanel>
+          </ToggleButton>
+
+          <Popup IsOpen="{Binding IsChecked, ElementName=AccountToggle}" StaysOpen="False"
+                 Placement="Bottom" HorizontalOffset="-176" VerticalOffset="8"
+                 AllowsTransparency="True" PopupAnimation="Fade">
+            <Border Width="264" CornerRadius="12" Background="White"
+                    BorderBrush="{StaticResource Border1}" BorderThickness="1" Margin="8">
+              <Border.Effect>
+                <DropShadowEffect Color="#26000000" BlurRadius="20" ShadowDepth="3" Direction="270" />
+              </Border.Effect>
+              <StackPanel>
+                <!-- 个人资料头部 -->
+                <StackPanel Margin="18,18,18,14">
+                  <Border Width="46" Height="46" CornerRadius="23" Background="{StaticResource Accent}" HorizontalAlignment="Left">
+                    <TextBlock Text="{Binding Avatar}" Foreground="White" FontSize="19" FontWeight="SemiBold"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                  <TextBlock Text="{Binding UserName}" FontSize="15" FontWeight="SemiBold"
+                             Foreground="{StaticResource TextBrush}" Margin="0,11,0,3" />
+                  <TextBlock Foreground="{StaticResource TextMuted}" FontSize="12">
+                    <Run Text="工号 " /><Run Text="{Binding EmployeeId, Mode=OneWay}" />
+                  </TextBlock>
+                </StackPanel>
+
+                <Border Height="1" Background="{StaticResource Border1}" />
+
+                <!-- 个人资料明细（不含权限） -->
+                <Grid Margin="18,13,18,13">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="52" />
+                    <ColumnDefinition Width="*" />
+                  </Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                  </Grid.RowDefinitions>
+                  <TextBlock Grid.Row="0" Grid.Column="0" Text="部门" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,0,0,7" />
+                  <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Department}" Foreground="{StaticResource TextBrush}" FontSize="12" Margin="0,0,0,7" TextWrapping="Wrap" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Text="岗位" Foreground="{StaticResource TextMuted}" FontSize="12" />
+                  <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Position}" Foreground="{StaticResource TextBrush}" FontSize="12" TextWrapping="Wrap" />
+                </Grid>
+
+                <Border Height="1" Background="{StaticResource Border1}" />
+
+                <!-- 操作 -->
+                <Button Style="{StaticResource MenuItemButton}" Click="OnChangePassword" Margin="0,6,0,0">
+                  <StackPanel Orientation="Horizontal">
+                    <fi:SymbolIcon Symbol="LockClosed" FontSize="16" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                    <TextBlock Text="更改密码" Margin="11,0,0,0" VerticalAlignment="Center" />
+                  </StackPanel>
+                </Button>
+                <Button Style="{StaticResource MenuItemButton}" Click="OnLogout" Margin="0,0,0,6">
+                  <StackPanel Orientation="Horizontal">
+                    <fi:SymbolIcon Symbol="SignOut" FontSize="16" Foreground="#DC2626" VerticalAlignment="Center" />
+                    <TextBlock Text="退出登录" Margin="11,0,0,0" VerticalAlignment="Center" Foreground="#DC2626" />
+                  </StackPanel>
+                </Button>
+              </StackPanel>
+            </Border>
+          </Popup>
+        </Grid>
       </DockPanel>
     </Border>
 

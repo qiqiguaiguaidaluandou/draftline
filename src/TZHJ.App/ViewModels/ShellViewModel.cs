@@ -17,7 +17,13 @@ public sealed partial class ShellViewModel : ObservableObject
     [ObservableProperty] private NavItem? _selectedItem;
 
     public IReadOnlyList<NavGroup> Groups { get; }
-    public string OperatorDisplay { get; }
+
+    // 个人资料（右上角账户菜单展示，不含权限）
+    public string UserName { get; }
+    public string EmployeeId { get; }
+    public string Department { get; }
+    public string Position { get; }
+    public string Avatar { get; }
 
     public ShellViewModel(INavigationService nav, ISession session)
     {
@@ -25,7 +31,11 @@ public sealed partial class ShellViewModel : ObservableObject
         _nav.CurrentChanged += vm => CurrentPage = vm;
 
         var op = session.Operator;
-        OperatorDisplay = $"{op.DisplayName} · 工号 {op.EmployeeId} · {op.Department} / {op.Position}";
+        UserName = op.DisplayName;
+        EmployeeId = op.EmployeeId;
+        Department = string.IsNullOrWhiteSpace(op.Department) ? "—" : op.Department!;
+        Position = string.IsNullOrWhiteSpace(op.Position) ? "—" : op.Position!;
+        Avatar = string.IsNullOrEmpty(op.DisplayName) ? "?" : op.DisplayName[..1];
 
         var groups = new List<NavGroup>();
         if (op.CanAccess(FlowType.Pricing)) groups.Add(BuildFlowGroup("图纸核价", FlowType.Pricing));

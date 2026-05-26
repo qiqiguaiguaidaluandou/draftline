@@ -54,6 +54,9 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     public bool IsReadOnly { get; }
     public string TargetSystem { get; }
 
+    /// <summary>整批回传按钮文案：核价→回传到SRM，挑图→回传到EBS。</summary>
+    public string SubmitButtonText => $"回传到{TargetSystem}";
+
     [ObservableProperty] private string _folderPathText = string.Empty;
 
     public int PendingCount => Rows.Count(r => r.Status == RowStatus.Pending);
