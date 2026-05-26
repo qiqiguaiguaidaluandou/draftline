@@ -63,16 +63,21 @@ public partial class BatchWorkView : UserControl
             };
         }
 
+        // 手填文本（如目标价）：单元格内常驻 TextBox（单击即填，无需双击进编辑态）。
         if (!readOnly && f.IsEditable)
         {
-            return new DataGridTextColumn
+            var box = new FrameworkElementFactory(typeof(TextBox));
+            box.SetValue(FrameworkElement.MarginProperty, new Thickness(2, 4, 2, 4));
+            box.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            box.SetBinding(TextBox.TextProperty, new Binding($"[{f.Key}]")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            });
+            return new DataGridTemplateColumn
             {
                 Header = f.DisplayName,
-                Binding = new Binding($"[{f.Key}]")
-                {
-                    Mode = BindingMode.TwoWay,
-                    UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
-                },
+                CellTemplate = new DataTemplate { VisualTree = box },
                 Width = 120,
             };
         }

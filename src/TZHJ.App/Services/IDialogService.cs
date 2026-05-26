@@ -1,4 +1,5 @@
 using System.Windows;
+using TZHJ.App.Views;
 
 namespace TZHJ.App.Services;
 
@@ -34,9 +35,12 @@ public sealed class DialogService : IDialogService
 {
     public event Action<ToastInfo>? ToastRequested;
 
-    public bool Confirm(string title, string message) =>
-        MessageBox.Show(message, title, MessageBoxButton.OKCancel, MessageBoxImage.Question)
-            == MessageBoxResult.OK;
+    public bool Confirm(string title, string message)
+    {
+        var owner = Application.Current?.Windows.OfType<Window>().FirstOrDefault(w => w.IsActive);
+        var dlg = new ConfirmWindow(title, message) { Owner = owner };
+        return dlg.ShowDialog() == true;
+    }
 
     public void Info(string message) => Toast(new ToastInfo(message, ToastKind.Info));
     public void Success(string message) => Toast(new ToastInfo(message, ToastKind.Success));

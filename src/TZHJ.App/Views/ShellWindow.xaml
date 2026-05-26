@@ -35,13 +35,11 @@
           </ToggleButton>
 
           <Popup IsOpen="{Binding IsChecked, ElementName=AccountToggle}" StaysOpen="False"
-                 Placement="Bottom" HorizontalOffset="-176" VerticalOffset="8"
+                 Placement="Bottom" HorizontalOffset="-168" VerticalOffset="6"
                  AllowsTransparency="True" PopupAnimation="Fade">
+            <!-- 圆角描边卡片（不用 DropShadowEffect，避免透明弹窗下渲染成黑边） -->
             <Border Width="264" CornerRadius="12" Background="White"
-                    BorderBrush="{StaticResource Border1}" BorderThickness="1" Margin="8">
-              <Border.Effect>
-                <DropShadowEffect Color="#26000000" BlurRadius="20" ShadowDepth="3" Direction="270" />
-              </Border.Effect>
+                    BorderBrush="{StaticResource Border2}" BorderThickness="1" Margin="0">
               <StackPanel>
                 <!-- 个人资料头部 -->
                 <StackPanel Margin="18,18,18,14">

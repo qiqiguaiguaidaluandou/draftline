@@ -373,12 +373,10 @@
                           IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" />
             <Popup x:Name="PART_Popup" Placement="Bottom" AllowsTransparency="True"
                    IsOpen="{TemplateBinding IsDropDownOpen}" Focusable="False" PopupAnimation="Fade">
-              <Border Margin="0,4,0,8" CornerRadius="8" Background="White"
-                      BorderBrush="{StaticResource Border1}" BorderThickness="1"
+              <!-- 圆角描边（不用 DropShadowEffect，避免透明弹窗下渲染成黑边） -->
+              <Border Margin="0,4,0,4" CornerRadius="8" Background="White"
+                      BorderBrush="{StaticResource Border2}" BorderThickness="1"
                       MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
-                <Border.Effect>
-                  <DropShadowEffect Color="#26000000" BlurRadius="16" ShadowDepth="2" Direction="270" />
-                </Border.Effect>
                 <ScrollViewer MaxHeight="240" Margin="4">
                   <ItemsPresenter />
                 </ScrollViewer>
