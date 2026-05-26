@@ -36,7 +36,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
 
     // ---------- 列表 ----------
 
-    public Task<IReadOnlyList<Batch>> ListBatchesAsync(
+    public async Task<IReadOnlyList<Batch>> ListBatchesAsync(
         FlowType flow, string employeeId, BatchLocation location, CancellationToken ct = default)
     {
         var dir = LocalPaths.LocationRoot(Root, flow, employeeId, location);
@@ -50,8 +50,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
                 if (!LocalPaths.TryParseFolderName(folderName, out var start, out var end))
                     continue;
 
-                var manifest = BatchManifest.LoadAsync(Path.Combine(sub, LocalFolders.Manifest), ct)
-                    .GetAwaiter().GetResult();
+                var manifest = await BatchManifest.LoadAsync(Path.Combine(sub, LocalFolders.Manifest), ct);
 
                 var rows = manifest is not null
                     ? manifest.Rows.Select(m => new MaterialRow
@@ -78,8 +77,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
             }
         }
 
-        IReadOnlyList<Batch> ordered = batches.OrderByDescending(b => b.WindowStart).ToList();
-        return Task.FromResult(ordered);
+        return batches.OrderByDescending(b => b.WindowStart).ToList();
     }
 
     // ---------- 读取完整批次 ----------
