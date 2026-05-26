@@ -7,8 +7,6 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
@@ -58,19 +56,7 @@
       </DockPanel>
     </Border>
 
-    <!-- 提交闸门提示 -->
-    <Border Grid.Row="2" Background="{StaticResource OrangeBg}" BorderBrush="#F3DCBE" BorderThickness="1" CornerRadius="8" Margin="24,0,24,6" Padding="13,9"
-            Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
-      <TextBlock Text="{Binding GateText}" Foreground="#9A5408" TextWrapping="Wrap" />
-    </Border>
-
-    <!-- 看图说明 -->
-    <Border Grid.Row="3" Background="{StaticResource AccentLight}" BorderBrush="#CFE0FB" BorderThickness="1" CornerRadius="8" Margin="24,0,24,8" Padding="13,9">
-      <TextBlock Foreground="{StaticResource AccentDark}" TextWrapping="Wrap"
-                 Text="图纸不在软件内查看：点「打开文件夹（含图纸）」到本批次目录，用本机 PDF 阅读器 / CAD 打开（文件名带物料编码前缀）。填入待填列即自动判为「已处理」。" />
-    </Border>
-
     <!-- 可编辑网格（列由字段 schema 在代码后置动态生成） -->
-    <DataGrid Grid.Row="4" x:Name="Grid" Margin="24,0,24,20" ItemsSource="{Binding Rows}" />
+    <DataGrid Grid.Row="2" x:Name="Grid" Margin="24,0,24,20" ItemsSource="{Binding Rows}" />
   </Grid>
 </UserControl>

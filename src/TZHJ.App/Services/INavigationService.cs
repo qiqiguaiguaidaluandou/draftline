@@ -42,5 +42,12 @@ public sealed class NavigationService : INavigationService
     public void ToSettings() =>
         Raise(ActivatorUtilities.CreateInstance<SettingsViewModel>(_sp));
 
-    private void Raise(ViewModelBase vm) => CurrentChanged?.Invoke(vm);
+    // 导航即加载：切到目标页后立即触发数据加载，不再依赖各 View 的 Loaded 生命周期
+    // （ContentControl 切换内容时 Loaded 不一定按预期触发，导致列表空白、需手动刷新才有内容）。
+    private async void Raise(ViewModelBase vm)
+    {
+        CurrentChanged?.Invoke(vm);
+        try { await vm.LoadAsync(); }
+        catch { /* 列表加载失败不应使应用崩溃；命令型操作（补拉/提交等）各自报错 */ }
+    }
 }

@@ -14,7 +14,8 @@ public partial class BatchWorkView : UserControl
 
     public BatchWorkView() => InitializeComponent();
 
-    private async void OnLoaded(object sender, RoutedEventArgs e)
+    // 仅负责按字段 schema 动态建列（视图职责）；行数据加载由 NavigationService 在导航时触发。
+    private void OnLoaded(object sender, RoutedEventArgs e)
     {
         if (DataContext is not BatchWorkViewModel vm) return;
         if (!_columnsBuilt)
@@ -22,7 +23,6 @@ public partial class BatchWorkView : UserControl
             BuildColumns(vm);
             _columnsBuilt = true;
         }
-        await vm.LoadAsync();
     }
 
     /// <summary>列由字段 schema 驱动：只读字段 / 手填文本 / 手填下拉 + 图纸 + 行状态 + 操作。</summary>
@@ -44,17 +44,22 @@ public partial class BatchWorkView : UserControl
     private static DataGridColumn BuildFieldColumn(FieldDefinition f, bool readOnly)
     {
         // 已处理批次只读查看：所有列只读。
+        // 手填下拉：单元格内常驻一个 ComboBox（单击即选，无需双击进编辑态），样式见 FluentTheme。
         if (!readOnly && f.IsEditable && f.Editor == FieldEditor.Dropdown)
         {
-            return new DataGridComboBoxColumn
+            var combo = new FrameworkElementFactory(typeof(ComboBox));
+            combo.SetValue(ItemsControl.ItemsSourceProperty, f.Options);
+            combo.SetValue(FrameworkElement.MarginProperty, new Thickness(2, 4, 2, 4));
+            combo.SetValue(FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Center);
+            combo.SetBinding(ComboBox.SelectedItemProperty, new Binding($"[{f.Key}]")
+            {
+                Mode = BindingMode.TwoWay,
+                UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
+            });
+            return new DataGridTemplateColumn
             {
                 Header = f.DisplayName,
-                ItemsSource = f.Options,
-                SelectedItemBinding = new Binding($"[{f.Key}]")
-                {
-                    Mode = BindingMode.TwoWay,
-                    UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged,
-                },
+                CellTemplate = new DataTemplate { VisualTree = combo },
                 Width = 150,
             };
         }

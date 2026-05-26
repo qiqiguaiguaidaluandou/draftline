@@ -1,15 +1,9 @@
-using System.Windows;
 using System.Windows.Controls;
-using TZHJ.App.ViewModels;
 
 namespace TZHJ.App.Views;
 
 public partial class ExceptionPoolView : UserControl
 {
+    // 数据加载由 NavigationService 在导航时触发（见 INavigationService.Raise）。
     public ExceptionPoolView() => InitializeComponent();
-
-    private async void OnLoaded(object sender, RoutedEventArgs e)
-    {
-        if (DataContext is ViewModelBase vm) await vm.LoadAsync();
-    }
 }
