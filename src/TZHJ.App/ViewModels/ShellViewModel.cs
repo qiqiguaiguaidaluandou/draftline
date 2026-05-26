@@ -39,7 +39,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         var groups = new List<NavGroup>();
         if (op.CanAccess(FlowType.Pricing)) groups.Add(BuildFlowGroup("图纸核价", FlowType.Pricing));
-        if (op.CanAccess(FlowType.DrawingSelection)) groups.Add(BuildFlowGroup("挑图纸", FlowType.DrawingSelection));
+        if (op.CanAccess(FlowType.DrawingSelection)) groups.Add(BuildFlowGroup("机加工挑图", FlowType.DrawingSelection));
         groups.Add(new NavGroup
         {
             Header = "系统",
