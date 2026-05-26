@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>WPF 客户端界面预览（Fluent 商务风 · 审阅用）</title>
+<style>
+  :root{
+    --accent:#2563eb; --accent-d:#1d4ed8; --accent-l:#eef4ff; --accent-dis:#c5d3f3;
+    --win-bg:#f4f6f8; --panel:#fff; --sidebar:#fafbfc; --hover:#f2f4f7;
+    --b1:#e6e8ec; --b2:#d8dce2;
+    --text:#1b1f24; --text2:#5b6470; --muted:#9aa1ab;
+    --green:#15803d; --green-bg:#e9f7ef; --orange:#c2680a; --orange-bg:#fdf3e7; --gray:#5b626b; --gray-bg:#f1f2f4;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:"Microsoft YaHei","Segoe UI",system-ui,sans-serif;background:#2c313a;color:var(--text);
+       font-size:13px;display:flex;flex-direction:column;align-items:center;padding:18px;gap:12px;-webkit-font-smoothing:antialiased;}
+  .note-top{color:#cfd4db;font-size:12px;max-width:1220px;line-height:1.6;}
+  .note-top b{color:#fff;}
+
+  .ic{display:inline-block;vertical-align:middle;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;width:16px;height:16px;}
+  .ic-18{width:18px;height:18px;} .ic-22{width:22px;height:22px;} .ic-30{width:30px;height:30px;}
+
+  .window{width:1220px;height:818px;background:var(--win-bg);border-radius:10px;overflow:hidden;
+          box-shadow:0 22px 64px rgba(0,0,0,.5);display:flex;flex-direction:column;position:relative;}
+
+  /* 系统标题栏（窗口自带）+ 应用头（白色），对应当前实现 */
+  .osbar{height:30px;background:#e9ecef;display:flex;align-items:center;padding:0 12px;flex:none;color:var(--text2);font-size:12px;}
+  .osbar .sp{flex:1;}
+  .osbar .wc{width:28px;text-align:center;color:#8a9099;}
+  .apphead{height:52px;background:var(--panel);border-bottom:1px solid var(--b1);display:flex;align-items:center;padding:0 18px;flex:none;}
+  .apphead .brand{font-size:14px;font-weight:600;margin-left:10px;}
+  .apphead .sp{flex:1;}
+  .apphead .user{color:var(--muted);font-size:12px;}
+  .logo{color:var(--accent);}
+
+  .body{flex:1;display:flex;min-height:0;}
+  .sidebar{width:228px;background:var(--sidebar);border-right:1px solid var(--b1);flex:none;padding:12px 10px;display:flex;flex-direction:column;}
+  .grp{margin-bottom:14px;}
+  .grp .h{color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;}
+  .nav{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--text2);margin:1px 0;}
+  .nav:hover{background:var(--hover);}
+  .nav.active{background:var(--accent-l);color:var(--accent);font-weight:600;}
+  .side-foot{margin-top:auto;color:var(--muted);font-size:11px;line-height:1.55;padding:10px;border-top:1px solid var(--b1);}
+
+  .content{flex:1;display:flex;flex-direction:column;min-width:0;}
+  .screen{display:none;flex-direction:column;height:100%;min-height:0;}
+  .screen.active{display:flex;}
+
+  .head{background:var(--panel);border-bottom:1px solid var(--b1);padding:14px 24px;flex:none;display:flex;align-items:center;gap:8px;}
+  .head h1{font-size:18px;font-weight:600;}
+  .head .back{color:var(--accent);cursor:pointer;display:inline-flex;align-items:center;gap:4px;}
+  .pbody{flex:1;overflow:auto;padding:16px 24px;min-height:0;display:flex;flex-direction:column;}
+
+  .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  .toolbar .sp{flex:1;}
+  .path{font-family:Consolas,monospace;color:var(--muted);font-size:12px;}
+
+  .btn{height:32px;padding:0 12px;border:1px solid var(--b2);background:#fff;border-radius:6px;cursor:pointer;font-size:12.5px;color:var(--text);
+       display:inline-flex;align-items:center;gap:6px;transition:.12s;}
+  .btn:hover{border-color:var(--accent);color:var(--accent);background:#fafcff;}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;}
+  .btn.primary:hover{background:var(--accent-d);}
+  .btn.primary:disabled{background:var(--accent-dis);border-color:var(--accent-dis);cursor:not-allowed;}
+  .btn.subtle{border-color:transparent;background:transparent;}
+  .btn.subtle:hover{background:var(--hover);}
+  .btn.sm{height:28px;padding:0 9px;font-size:11.5px;}
+
+  .card{background:var(--panel);border:1px solid var(--b1);border-radius:10px;}
+
+  table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--b1);border-radius:10px;overflow:hidden;font-size:12.5px;}
+  th{background:#fafbfc;color:var(--muted);font-weight:600;font-size:11.5px;text-align:left;padding:10px 12px;border-bottom:1px solid var(--b1);white-space:nowrap;}
+  td{padding:8px 12px;border-bottom:1px solid #f1f2f4;height:36px;white-space:nowrap;}
+  tbody tr:nth-child(even){background:#fbfcfd;}
+  tbody tr:hover{background:#f7f9fc;}
+  .mono{font-family:Consolas,monospace;}
+
+  .badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;}
+  .b-gray{color:var(--gray);background:var(--gray-bg);} .b-blue{color:var(--accent);background:var(--accent-l);}
+  .b-green{color:var(--green);background:var(--green-bg);} .b-orange{color:var(--orange);background:var(--orange-bg);}
+
+  .infobar{display:flex;align-items:center;gap:16px;margin-bottom:8px;padding:10px 14px;}
+  .infobar .sp{flex:1;}
+  .lbl{color:var(--muted);}
+  .gate{border-radius:8px;padding:9px 13px;margin-bottom:6px;font-size:12.5px;display:flex;align-items:center;gap:8px;}
+  .gate.warn{background:var(--orange-bg);border:1px solid #f3dcbe;color:#9a5408;}
+  .gate.ok{background:var(--green-bg);border:1px solid #c2e6cf;color:var(--green);}
+  .gate.info{background:var(--accent-l);border:1px solid #cfe0fb;color:var(--accent-d);}
+
+  input.cell{width:80px;height:28px;border:1px solid var(--b2);border-radius:6px;padding:0 8px;text-align:right;font-family:Consolas,monospace;}
+  input.cell:focus{outline:none;border-color:var(--accent);}
+  select.cell{height:28px;border:1px solid var(--b2);border-radius:6px;padding:0 6px;}
+  .gridwrap{flex:1;min-height:0;overflow:auto;border:1px solid var(--b1);border-radius:10px;}
+  .gridwrap table{border:none;border-radius:0;}
+  .xbar{background:#fafbfc;border-bottom:1px solid var(--b1);padding:9px 12px;color:var(--text2);font-size:12px;position:sticky;top:0;display:flex;align-items:center;gap:6px;}
+  .scrollhint{color:var(--orange);font-size:11.5px;margin-left:8px;}
+  h3.sec{font-size:13.5px;margin:6px 0 8px;font-weight:600;}
+  .kv{display:flex;align-items:center;gap:10px;padding:6px 0;}
+  .kv .k{color:var(--muted);width:170px;}
+
+  .toast-host{position:absolute;left:50%;bottom:28px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:6px;z-index:100;pointer-events:none;}
+  .toast{color:#fff;padding:11px 18px;border-radius:8px;font-size:12.5px;box-shadow:0 8px 24px rgba(0,0,0,.3);opacity:0;animation:tin .25s forwards;max-width:560px;}
+  .toast.info{background:#1e2228;} .toast.success{background:var(--green);} .toast.error{background:#dc2626;}
+  @keyframes tin{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+
+<!-- ===== 内联 SVG 图标（近似 Fluent 线性风，替代 emoji） ===== -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <symbol id="ic-logo" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 12h6M9 15.5h6M12 12v3.5"/></symbol>
+    <symbol id="ic-doclist" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/><path d="M9 11.5h5M9 14.5h5M9 17.5h3"/></symbol>
+    <symbol id="ic-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.3 12.4l2.5 2.5 4.8-5.2"/></symbol>
+    <symbol id="ic-warn" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4.5"/><path d="M12 17.4v.2"/></symbol>
+    <symbol id="ic-calclock" viewBox="0 0 24 24"><rect x="3.5" y="5" width="11.5" height="14" rx="2"/><path d="M3.5 9h11.5M8 3.5v3M13 3.5v3"/><circle cx="17.5" cy="16" r="4.5"/><path d="M17.5 14v2.2l1.6 1"/></symbol>
+    <symbol id="ic-settings" viewBox="0 0 24 24"><path d="M4 8h9M17 8h3M4 16h3M11 16h9"/><circle cx="15" cy="8" r="2.3"/><circle cx="9" cy="16" r="2.3"/></symbol>
+    <symbol id="ic-folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 012-2h3.5l2 2H17a2 2 0 012 2v1.5H3z"/><path d="M3 10.5h17.5l-1.8 7.4a1.2 1.2 0 01-1.2.9H4.4a1.2 1.2 0 01-1.2-.9z"/></symbol>
+    <symbol id="ic-sync" viewBox="0 0 24 24"><path d="M5.5 9.5A7 7 0 0117 6.7l2 1.8"/><path d="M18.5 14.5A7 7 0 017 17.3l-2-1.8"/><path d="M19 4v4.5h-4.5M5 20v-4.5h4.5"/></symbol>
+    <symbol id="ic-refresh" viewBox="0 0 24 24"><path d="M19 12a7 7 0 11-2.1-5"/><path d="M17.5 3v4.2h-4.2"/></symbol>
+    <symbol id="ic-save" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></symbol>
+    <symbol id="ic-upload" viewBox="0 0 24 24"><path d="M12 15.5V4M8 8l4-4 4 4"/><path d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></symbol>
+    <symbol id="ic-back" viewBox="0 0 24 24"><path d="M14.5 6l-6 6 6 6"/></symbol>
+    <symbol id="ic-doc" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/></symbol>
+  </defs>
+</svg>
+
+<div class="note-top">
+  <b>WPF 客户端界面预览 · Fluent 商务风</b>　镜像当前实现（蓝 #2563EB 强调色、圆角/卡片/表格样式取自 <code>App.xaml</code>+主题字典，图标对应 FluentIcons）。
+  含上轮优化：填待填列自动判「已处理」、可撤销异常、底部 Toast。点左侧导航切换页面。
+  <i>（预览图标用内联 SVG 近似 Fluent 线性图标，真机为 FluentIcons.Wpf 矢量字形，更精细。）</i>
+</div>
+
+<div class="window">
+  <div class="osbar"><span>图纸核价 / 挑图纸系统</span><span class="sp"></span><span class="wc">—</span><span class="wc">▢</span><span class="wc">✕</span></div>
+  <div class="apphead">
+    <svg class="ic ic-22 logo"><use href="#ic-logo"/></svg>
+    <span class="brand">图纸核价 / 挑图纸系统</span>
+    <span class="sp"></span>
+    <span class="user">张三 · 工号 10086 · 采购部 / 核价员</span>
+  </div>
+
+  <div class="body">
+    <div class="sidebar">
+      <div class="grp">
+        <div class="h">图纸核价</div>
+        <div class="nav active" data-s="hj-todo"><svg class="ic ic-18"><use href="#ic-doclist"/></svg>待处理</div>
+        <div class="nav" data-s="hj-done"><svg class="ic ic-18"><use href="#ic-check"/></svg>已处理</div>
+        <div class="nav" data-s="hj-exc"><svg class="ic ic-18"><use href="#ic-warn"/></svg>异常待跟进</div>
+      </div>
+      <div class="grp">
+        <div class="h">挑图纸</div>
+        <div class="nav" data-s="tt-todo"><svg class="ic ic-18"><use href="#ic-doclist"/></svg>待处理</div>
+        <div class="nav" data-s="tt-done"><svg class="ic ic-18"><use href="#ic-check"/></svg>已处理</div>
+        <div class="nav" data-s="tt-exc"><svg class="ic ic-18"><use href="#ic-warn"/></svg>异常待跟进</div>
+      </div>
+      <div class="grp">
+        <div class="h">系统</div>
+        <div class="nav" data-s="schedule"><svg class="ic ic-18"><use href="#ic-calclock"/></svg>采集计划</div>
+        <div class="nav" data-s="settings"><svg class="ic ic-18"><use href="#ic-settings"/></svg>设置</div>
+      </div>
+      <div class="side-foot">「待处理 / 已处理 / 异常待跟进」即映射本机文件夹，软件是文件夹的视图。图纸由操作员自行到文件夹用本机软件查看。</div>
+    </div>
+
+    <div class="content">
+
+      <!-- 核价·待处理 -->
+      <div class="screen active" id="hj-todo">
+        <div class="head"><h1>图纸核价 · 待处理</h1></div>
+        <div class="pbody">
+          <div class="toolbar">
+            <span class="path">D:\TZHJ_Data\核价\10086\待处理\</span>
+            <button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button>
+            <span class="sp"></span>
+            <button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button>
+            <button class="btn" onclick="showToast('补拉完成，新增 1 个批次','success')"><svg class="ic"><use href="#ic-sync"/></svg>手动更新</button>
+          </div>
+          <table>
+            <thead><tr><th>批次（取数时间范围）</th><th>本地文件夹</th><th>物料数</th><th>进度 / 统计</th><th>状态</th><th>拉取</th><th>完成</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>05-25 09:31 ~ 05-25 15:30</td><td class="mono">20260525_0931-1530</td><td>6</td><td>0 / 6</td><td><span class="badge b-gray">未处理</span></td><td>15:31</td><td>—</td>
+                  <td><div style="display:flex;gap:6px"><button class="btn sm primary" data-s="hj-work">打开表单</button><button class="btn sm subtle" title="打开文件夹"><svg class="ic"><use href="#ic-folder"/></svg></button></div></td></tr>
+              <tr><td>05-24 15:31 ~ 05-25 09:30</td><td class="mono">20260524_1531-20260525_0930</td><td>6</td><td>4 / 6</td><td><span class="badge b-blue">处理中</span></td><td>09:31</td><td>—</td>
+                  <td><div style="display:flex;gap:6px"><button class="btn sm primary" data-s="hj-work">打开表单</button><button class="btn sm subtle" title="打开文件夹"><svg class="ic"><use href="#ic-folder"/></svg></button></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 核价·批次作业 -->
+      <div class="screen" id="hj-work">
+        <div class="head"><span class="back" data-s="hj-todo"><svg class="ic"><use href="#ic-back"/></svg>返回</span><h1>批次作业 · 05-24 15:31 ~ 05-25 09:30</h1></div>
+        <div class="pbody">
+          <div class="card infobar">
+            <span><span class="lbl">进度：</span><b id="hj-prog">已处理 4 / 6</b></span>
+            <span class="path">…\待处理\20260524_1531-20260525_0930\</span>
+            <button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹（含图纸）</button>
+            <span class="sp"></span>
+            <button class="btn" onclick="showToast('已写回 清单表格.xlsx（暂存）','success')"><svg class="ic"><use href="#ic-save"/></svg>暂存</button>
+            <button class="btn primary" id="hj-submit" disabled onclick="doSubmit('hj')"><svg class="ic"><use href="#ic-upload"/></svg>上传（整批回传 SRM）</button>
+          </div>
+          <div class="gate warn" id="hj-gate"></div>
+          <div class="gate info"><svg class="ic"><use href="#ic-doc"/></svg><span>图纸不在软件内查看：点「打开文件夹（含图纸）」到本批次目录，用本机 PDF 阅读器 / CAD 打开。填入目标价即自动判为「已处理」。</span></div>
+          <div class="gridwrap">
+            <div class="xbar"><svg class="ic"><use href="#ic-doc"/></svg>清单表格.xlsx — 软件内填写、暂存即写回该 Excel。列由字段配置驱动。</div>
+            <table>
+              <thead><tr>
+                <th>物料编码</th><th>型号</th><th>名称</th><th>需求数量</th><th>当前是否存在变更</th><th>目标价</th>
+                <th>图纸</th><th>行状态</th><th>异常原因</th><th>操作</th></tr></thead>
+              <tbody id="hj-rows">
+                <tr data-status="done"><td class="mono">M-10231</td><td>GB-6521</td><td>支架A / Q235 3mm</td><td>68</td><td>无变更</td><td><input class="cell" value="12.80" oninput="fill('hj',this)"></td>
+                    <td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td>
+                    <td><button class="btn sm" onclick="suspend('hj',this)">挂起异常</button></td></tr>
+                <tr data-status="done"><td class="mono">M-10244</td><td>GB-1181</td><td>法兰盘 / 45# 调质</td><td>120</td><td>无变更</td><td><input class="cell" value="34.50" oninput="fill('hj',this)"></td>
+                    <td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td>
+                    <td><button class="btn sm" onclick="suspend('hj',this)">挂起异常</button></td></tr>
+                <tr data-status="done"><td class="mono">M-10258</td><td>GB-8432</td><td>轴套 / 不锈钢304</td><td>33</td><td>无变更</td><td><input class="cell" value="8.20" oninput="fill('hj',this)"></td>
+                    <td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td>
+                    <td><button class="btn sm" onclick="suspend('hj',this)">挂起异常</button></td></tr>
+                <tr data-status="exc"><td class="mono">M-10260</td><td>GB-5530</td><td>盖板 / 铝6061</td><td>41</td><td>有变更</td><td><input class="cell" disabled></td>
+                    <td><span class="badge b-orange">⚠ 无图纸</span></td><td><span class="badge b-orange">挂起异常</span></td><td>图纸缺失</td>
+                    <td><button class="btn sm" onclick="restore('hj',this)">撤销异常</button></td></tr>
+                <tr data-status="pending"><td class="mono">M-10277</td><td>GB-2210</td><td>连接件 / Q355</td><td>237</td><td>无变更</td><td><input class="cell" placeholder="目标价" oninput="fill('hj',this)"></td>
+                    <td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-gray">待处理</span></td><td></td>
+                    <td><button class="btn sm" onclick="suspend('hj',this)">挂起异常</button></td></tr>
+                <tr data-status="pending"><td class="mono">M-10281</td><td>GB-7740</td><td>端盖 / 铸铁 HT250</td><td>461</td><td>无变更</td><td><input class="cell" placeholder="目标价" oninput="fill('hj',this)"></td>
+                    <td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-gray">待处理</span></td><td></td>
+                    <td><button class="btn sm" onclick="suspend('hj',this)">挂起异常</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 核价·已处理 -->
+      <div class="screen" id="hj-done">
+        <div class="head"><h1>图纸核价 · 已处理</h1></div>
+        <div class="pbody">
+          <div class="toolbar"><span class="path">D:\TZHJ_Data\核价\10086\已处理\</span><button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button><span class="sp"></span><button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button></div>
+          <table>
+            <thead><tr><th>批次（取数时间范围）</th><th>本地文件夹</th><th>物料数</th><th>正常 / 异常</th><th>状态</th><th>拉取</th><th>完成</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>05-24 09:31 ~ 05-24 15:30</td><td class="mono">20260524_0931-1530</td><td>5</td><td>正常 5 / 异常 0</td><td><span class="badge b-green">已处理</span></td><td>15:31</td><td>05-24 16:10</td><td><button class="btn sm" data-s="hj-work">查看</button></td></tr>
+              <tr><td>05-23 15:31 ~ 05-24 09:30</td><td class="mono">20260523_1531-20260524_0930</td><td>9</td><td>正常 8 / 异常 1</td><td><span class="badge b-green">已处理</span></td><td>09:31</td><td>05-24 11:42</td><td><button class="btn sm" data-s="hj-work">查看</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 核价·异常 -->
+      <div class="screen" id="hj-exc">
+        <div class="head"><h1>图纸核价 · 异常待跟进</h1></div>
+        <div class="pbody">
+          <div class="toolbar"><span class="path">D:\TZHJ_Data\核价\10086\异常待跟进\</span><button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button><span class="sp"></span><button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button></div>
+          <table>
+            <thead><tr><th>物料编码</th><th>名称</th><th>来源批次</th><th>异常原因</th><th>挂起时间</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">M-10567</td><td>销轴B / Q235 3mm</td><td class="mono">20260523_1531-20260524_0930</td><td>图纸版本不符</td><td>05-24 10:12</td></tr>
+              <tr><td class="mono">M-10260</td><td>盖板 / 铝6061</td><td class="mono">20260524_1531-20260525_0930</td><td>图纸缺失</td><td>05-25 09:55</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 挑图·待处理 -->
+      <div class="screen" id="tt-todo">
+        <div class="head"><h1>挑图纸 · 待处理</h1></div>
+        <div class="pbody">
+          <div class="toolbar"><span class="path">D:\TZHJ_Data\挑图\10086\待处理\</span><button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button><span class="sp"></span><button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button><button class="btn" onclick="showToast('补拉完成，新增 1 个批次','success')"><svg class="ic"><use href="#ic-sync"/></svg>手动补拉</button></div>
+          <table>
+            <thead><tr><th>批次（取数时间范围）</th><th>本地文件夹</th><th>物料数</th><th>进度 / 统计</th><th>状态</th><th>拉取</th><th>完成</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>05-25 15:31 ~ 05-25 18:00</td><td class="mono">20260525_1531-1800</td><td>8</td><td>0 / 8</td><td><span class="badge b-gray">未处理</span></td><td>18:01</td><td>—</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" data-s="tt-work">打开表单</button><button class="btn sm subtle"><svg class="ic"><use href="#ic-folder"/></svg></button></div></td></tr>
+              <tr><td>05-25 09:31 ~ 05-25 15:30</td><td class="mono">20260525_0931-1530</td><td>5</td><td>3 / 5</td><td><span class="badge b-blue">处理中</span></td><td>15:31</td><td>—</td><td><div style="display:flex;gap:6px"><button class="btn sm primary" data-s="tt-work">打开表单</button><button class="btn sm subtle"><svg class="ic"><use href="#ic-folder"/></svg></button></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 挑图·批次作业（宽，横向滚动） -->
+      <div class="screen" id="tt-work">
+        <div class="head"><span class="back" data-s="tt-todo"><svg class="ic"><use href="#ic-back"/></svg>返回</span><h1>批次作业 · 05-25 09:31 ~ 15:30</h1></div>
+        <div class="pbody">
+          <div class="card infobar">
+            <span><span class="lbl">进度：</span><b id="tt-prog">已处理 3 / 5</b></span>
+            <span class="path">…\待处理\20260525_0931-1530\</span>
+            <button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹（含图纸）</button>
+            <span class="sp"></span>
+            <button class="btn" onclick="showToast('已写回 清单表格.xlsx（暂存）','success')"><svg class="ic"><use href="#ic-save"/></svg>暂存</button>
+            <button class="btn primary" id="tt-submit" disabled onclick="doSubmit('tt')"><svg class="ic"><use href="#ic-upload"/></svg>上传（整批回传 EBS）</button>
+          </div>
+          <div class="gate warn" id="tt-gate"></div>
+          <div class="gate info"><svg class="ic"><use href="#ic-doc"/></svg><span>挑图为 16 列只读字段 + 待填列「是否机加中心可以做」。选「是/否」即自动判为「已处理」。<span class="scrollhint">⟷ 列较多需横向滚动（见 item 1「待优化」）</span></span></div>
+          <div class="gridwrap">
+            <div class="xbar"><svg class="ic"><use href="#ic-doc"/></svg>清单表格.xlsx</div>
+            <table>
+              <thead><tr>
+                <th>EBS-ID</th><th>库存组织</th><th>来源单号</th><th>项目</th><th>产品线</th><th>方案编号</th><th>部门描述</th><th>物料编码</th><th>物料描述</th><th>当前数量</th><th>创建日期</th><th>需求日期</th><th>申请人名称</th><th>备注</th><th>是否存在变更</th>
+                <th>是否机加中心可以做</th><th>图纸</th><th>行状态</th><th>异常原因</th><th>操作</th></tr></thead>
+              <tbody id="tt-rows">
+                <tr data-status="done"><td class="mono">EBS-20260525-0012</td><td>本部</td><td class="mono">PO-238104</td><td>项目A</td><td>产品线B</td><td class="mono">FA-3271</td><td>机加一车间</td><td class="mono">P-2009</td><td>支撑座 / 铸钢</td><td>40</td><td>2026-05-22</td><td>2026-06-10</td><td>王工</td><td></td><td>无变更</td>
+                    <td><select class="cell" onchange="fill('tt',this)"><option value=""></option><option selected>是</option><option>否</option></select></td><td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td><td><button class="btn sm" onclick="suspend('tt',this)">挂起异常</button></td></tr>
+                <tr data-status="done"><td class="mono">EBS-20260525-0031</td><td>分厂</td><td class="mono">PO-771230</td><td>项目C</td><td>产品线A</td><td class="mono">FA-8810</td><td>机加二车间</td><td class="mono">P-2013</td><td>薄壁壳体 / 铝合金</td><td>12</td><td>2026-05-21</td><td>2026-06-02</td><td>赵工</td><td>加急</td><td>无变更</td>
+                    <td><select class="cell" onchange="fill('tt',this)"><option value=""></option><option>是</option><option selected>否</option></select></td><td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td><td><button class="btn sm" onclick="suspend('tt',this)">挂起异常</button></td></tr>
+                <tr data-status="done"><td class="mono">EBS-20260525-0044</td><td>本部</td><td class="mono">PO-100922</td><td>项目B</td><td>产品线C</td><td class="mono">FA-1190</td><td>钣金车间</td><td class="mono">P-2021</td><td>主轴 / 40Cr</td><td>8</td><td>2026-05-23</td><td>2026-06-18</td><td>钱工</td><td></td><td>有变更</td>
+                    <td><select class="cell" onchange="fill('tt',this)"><option value=""></option><option selected>是</option><option>否</option></select></td><td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-blue">已处理</span></td><td></td><td><button class="btn sm" onclick="suspend('tt',this)">挂起异常</button></td></tr>
+                <tr data-status="pending"><td class="mono">EBS-20260525-0050</td><td>本部</td><td class="mono">PO-450118</td><td>项目A</td><td>产品线B</td><td class="mono">FA-2204</td><td>机加一车间</td><td class="mono">P-2026</td><td>泵体 / 铸铁</td><td>25</td><td>2026-05-22</td><td>2026-06-12</td><td>孙工</td><td></td><td>无变更</td>
+                    <td><select class="cell" onchange="fill('tt',this)"><option value="" selected></option><option>是</option><option>否</option></select></td><td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-gray">待处理</span></td><td></td><td><button class="btn sm" onclick="suspend('tt',this)">挂起异常</button></td></tr>
+                <tr data-status="pending"><td class="mono">EBS-20260525-0067</td><td>分厂</td><td class="mono">PO-882001</td><td>项目C</td><td>产品线A</td><td class="mono">FA-9931</td><td>机加二车间</td><td class="mono">P-2039</td><td>法兰 / QT600</td><td>60</td><td>2026-05-20</td><td>2026-05-30</td><td>王工</td><td></td><td>无变更</td>
+                    <td><select class="cell" onchange="fill('tt',this)"><option value="" selected></option><option>是</option><option>否</option></select></td><td><span class="badge b-gray">PDF·STEP</span></td><td><span class="badge b-gray">待处理</span></td><td></td><td><button class="btn sm" onclick="suspend('tt',this)">挂起异常</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 挑图·已处理 -->
+      <div class="screen" id="tt-done">
+        <div class="head"><h1>挑图纸 · 已处理</h1></div>
+        <div class="pbody">
+          <div class="toolbar"><span class="path">D:\TZHJ_Data\挑图\10086\已处理\</span><button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button><span class="sp"></span><button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button></div>
+          <table>
+            <thead><tr><th>批次（取数时间范围）</th><th>本地文件夹</th><th>物料数</th><th>正常 / 异常</th><th>状态</th><th>拉取</th><th>完成</th><th>操作</th></tr></thead>
+            <tbody>
+              <tr><td>05-24 18:01 ~ 05-25 09:30</td><td class="mono">20260524_1801-20260525_0930</td><td>9</td><td>正常 7 / 异常 2</td><td><span class="badge b-green">已处理</span></td><td>09:31</td><td>05-25 08:30</td><td><button class="btn sm" data-s="tt-work">查看</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 挑图·异常 -->
+      <div class="screen" id="tt-exc">
+        <div class="head"><h1>挑图纸 · 异常待跟进</h1></div>
+        <div class="pbody">
+          <div class="toolbar"><span class="path">D:\TZHJ_Data\挑图\10086\异常待跟进\</span><button class="btn"><svg class="ic"><use href="#ic-folder"/></svg>打开文件夹</button><span class="sp"></span><button class="btn"><svg class="ic"><use href="#ic-refresh"/></svg>刷新</button></div>
+          <table>
+            <thead><tr><th>物料编码</th><th>名称</th><th>来源批次</th><th>异常原因</th><th>挂起时间</th></tr></thead>
+            <tbody>
+              <tr><td class="mono">P-2050</td><td>异形件 / 钛合金</td><td class="mono">20260524_1801-20260525_0930</td><td>图纸不清晰</td><td>05-25 08:20</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 采集计划 -->
+      <div class="screen" id="schedule">
+        <div class="head"><h1>采集计划（定时拉取规则）</h1></div>
+        <div class="pbody">
+          <h3 class="sec">图纸核价（2 窗，日界 15:30 / 15:31）</h3>
+          <table style="margin-bottom:20px">
+            <thead><tr><th>窗口名</th><th>采集区间</th><th>触发时刻</th><th>启用</th></tr></thead>
+            <tbody>
+              <tr><td>上午批</td><td>昨天 15:31 ~ 今天 09:30</td><td>≈ 09:31 后（登录态）</td><td><span class="badge b-green">启用</span></td></tr>
+              <tr><td>下午批</td><td>今天 09:31 ~ 15:30</td><td>≈ 15:31 后（登录态）</td><td><span class="badge b-green">启用</span></td></tr>
+            </tbody>
+          </table>
+          <h3 class="sec">挑图纸（3 窗，日界 18:00 / 18:01；比核价多一傍晚窗）</h3>
+          <table>
+            <thead><tr><th>窗口名</th><th>采集区间</th><th>触发时刻</th><th>启用</th></tr></thead>
+            <tbody>
+              <tr><td>夜间批</td><td>昨天 18:01 ~ 今天 09:30</td><td>≈ 09:31 后（登录态）</td><td><span class="badge b-green">启用</span></td></tr>
+              <tr><td>上午批</td><td>今天 09:31 ~ 15:30</td><td>≈ 15:31 后（登录态）</td><td><span class="badge b-green">启用</span></td></tr>
+              <tr><td>下午批</td><td>今天 15:31 ~ 18:00</td><td>≈ 18:01 后（登录态）</td><td><span class="badge b-green">启用</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 设置 -->
+      <div class="screen" id="settings">
+        <div class="head"><h1>设置</h1></div>
+        <div class="pbody">
+          <div class="card" style="padding:18px;max-width:780px">
+            <div class="kv"><span class="k">当前操作员（本机固定）：</span><b>张三 · 工号 10086 · 采购部 / 核价员</b></div>
+            <div class="kv"><span class="k">本地数据根目录：</span><span class="mono">D:\TZHJ_Data</span><button class="btn sm subtle"><svg class="ic"><use href="#ic-folder"/></svg>打开</button></div>
+            <div class="kv"><span class="k">后端网关地址：</span><span class="mono">http://localhost:8080</span></div>
+            <div class="kv"><span class="k">图纸查看：</span><span>到本地批次文件夹自行用本机软件打开（软件不内嵌看图，PDF/STEP 走系统默认关联）</span></div>
+            <div class="kv"><span class="k">客户端版本：</span><span>1.0.0</span><button class="btn sm subtle" onclick="showToast('ClickOnce 检查更新（骨架占位）','info')"><svg class="ic"><use href="#ic-refresh"/></svg>检查更新</button></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast-host" id="toastHost"></div>
+</div>
+
+<script>
+  document.querySelectorAll('[data-s]').forEach(el=>{
+    el.addEventListener('click',()=>{
+      const id=el.getAttribute('data-s');
+      document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      if(el.classList.contains('nav')){
+        document.querySelectorAll('.nav').forEach(n=>n.classList.remove('active'));
+        el.classList.add('active');
+      }
+    });
+  });
+
+  function showToast(msg, kind){
+    const host=document.getElementById('toastHost');
+    const t=document.createElement('div');
+    t.className='toast '+(kind||'info'); t.textContent=msg;
+    host.appendChild(t);
+    setTimeout(()=>{ t.style.transition='opacity .25s'; t.style.opacity='0'; setTimeout(()=>t.remove(),250); }, 2600);
+  }
+
+  function badge(st){
+    if(st==='done') return '<span class="badge b-blue">已处理</span>';
+    if(st==='exc')  return '<span class="badge b-orange">挂起异常</span>';
+    return '<span class="badge b-gray">待处理</span>';
+  }
+  function opBtn(flow, st){
+    return st==='exc'
+      ? '<button class="btn sm" onclick="restore(\''+flow+'\',this)">撤销异常</button>'
+      : '<button class="btn sm" onclick="suspend(\''+flow+'\',this)">挂起异常</button>';
+  }
+  function setStatus(tr, st, flow){
+    tr.setAttribute('data-status', st);
+    const c=tr.querySelectorAll('td');
+    c[c.length-3].innerHTML=badge(st);
+    if(st!=='exc') c[c.length-2].textContent='';
+    c[c.length-1].innerHTML=opBtn(flow, st);
+    refreshGate(flow);
+  }
+  function fill(flow, el){
+    const tr=el.closest('tr');
+    if(tr.getAttribute('data-status')==='exc') return;
+    setStatus(tr, el.value.trim() ? 'done' : 'pending', flow);
+  }
+  function suspend(flow, btn){
+    const r=prompt('请填写异常原因：','图纸缺失'); if(r===null) return;
+    const tr=btn.closest('tr'); const c=tr.querySelectorAll('td');
+    tr.setAttribute('data-status','exc');
+    c[c.length-3].innerHTML=badge('exc'); c[c.length-2].textContent=r; c[c.length-1].innerHTML=opBtn(flow,'exc');
+    refreshGate(flow); showToast('已挂起异常：'+r,'info');
+  }
+  function restore(flow, btn){
+    const tr=btn.closest('tr');
+    const ed=tr.querySelector('input.cell, select.cell');
+    const filled=ed && !ed.disabled && ed.value.trim()!=='';
+    setStatus(tr, filled?'done':'pending', flow);
+    showToast('已撤销异常，回到'+(filled?'已处理':'待处理'),'info');
+  }
+  function refreshGate(flow){
+    const rows=[...document.querySelectorAll('#'+flow+'-rows tr')];
+    const total=rows.length;
+    const pend=rows.filter(r=>r.getAttribute('data-status')==='pending').length;
+    document.getElementById(flow+'-prog').textContent='已处理 '+(total-pend)+' / '+total;
+    const gate=document.getElementById(flow+'-gate'); const submit=document.getElementById(flow+'-submit');
+    if(pend===0){
+      gate.className='gate ok';
+      gate.innerHTML='<span>✅ 全部行已处理完毕（已填写或挂起异常），可整批回传 '+(flow==='hj'?'SRM':'EBS')+'。</span>';
+      submit.disabled=false;
+    }else{
+      gate.className='gate warn';
+      gate.innerHTML='<span>还有 <b>'+pend+'</b> 行处于「待处理」，每行需先填写或挂起异常，「上传」才可点（提交闸门）。</span>';
+      submit.disabled=true;
+    }
+  }
+  function doSubmit(flow){
+    if(document.getElementById(flow+'-submit').disabled) return;
+    showToast('上传成功：已回传 '+(flow==='hj'?'SRM':'EBS')+'，批次已移入「已处理」','success');
+  }
+  refreshGate('hj'); refreshGate('tt');
+</script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<Application x:Class="TZHJ.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:TZHJ.App.ViewModels"
+             xmlns:views="clr-namespace:TZHJ.App.Views"
+             xmlns:conv="clr-namespace:TZHJ.App.Converters"
+             ShutdownMode="OnExplicitShutdown">
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Styles/FluentTheme.xaml" />
+      </ResourceDictionary.MergedDictionaries>
+
+      <!-- 转换器 -->
+      <conv:StatusKindToBrushConverter x:Key="StatusKindToBrush" />
+      <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+      <conv:InverseBoolConverter x:Key="InverseBool" />
+      <conv:StringToVisibilityConverter x:Key="StringToVis" />
+
+      <!-- VM → View 模板映射（ContentControl 自动选视图） -->
+      <DataTemplate DataType="{x:Type vm:BatchListViewModel}">
+        <views:BatchListView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:BatchWorkViewModel}">
+        <views:BatchWorkView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:ExceptionPoolViewModel}">
+        <views:ExceptionPoolView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:ScheduleViewModel}">
+        <views:ScheduleView />
+      </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
+        <views:SettingsView />
+      </DataTemplate>
+
+    </ResourceDictionary>
+  </Application.Resources>
+</Application>

@@ -1,0 +1,46 @@
+using Microsoft.Extensions.DependencyInjection;
+using TZHJ.App.ViewModels;
+using TZHJ.Core.Enums;
+
+namespace TZHJ.App.Services;
+
+/// <summary>
+/// 壳内导航：创建目标 ViewModel 并通过 <see cref="CurrentChanged"/> 通知 Shell 切换内容区。
+/// 侧边栏（映射文件夹）与"开始作业"等都经此导航。
+/// </summary>
+public interface INavigationService
+{
+    event Action<ViewModelBase>? CurrentChanged;
+
+    void ToBatchList(FlowType flow, BatchLocation location);
+    void ToBatchWork(FlowType flow, BatchLocation location, string folderName);
+    void ToExceptions(FlowType flow);
+    void ToSchedule();
+    void ToSettings();
+}
+
+public sealed class NavigationService : INavigationService
+{
+    private readonly IServiceProvider _sp;
+
+    public NavigationService(IServiceProvider sp) => _sp = sp;
+
+    public event Action<ViewModelBase>? CurrentChanged;
+
+    public void ToBatchList(FlowType flow, BatchLocation location) =>
+        Raise(ActivatorUtilities.CreateInstance<BatchListViewModel>(_sp, flow, location));
+
+    public void ToBatchWork(FlowType flow, BatchLocation location, string folderName) =>
+        Raise(ActivatorUtilities.CreateInstance<BatchWorkViewModel>(_sp, flow, location, folderName));
+
+    public void ToExceptions(FlowType flow) =>
+        Raise(ActivatorUtilities.CreateInstance<ExceptionPoolViewModel>(_sp, flow));
+
+    public void ToSchedule() =>
+        Raise(ActivatorUtilities.CreateInstance<ScheduleViewModel>(_sp));
+
+    public void ToSettings() =>
+        Raise(ActivatorUtilities.CreateInstance<SettingsViewModel>(_sp));
+
+    private void Raise(ViewModelBase vm) => CurrentChanged?.Invoke(vm);
+}

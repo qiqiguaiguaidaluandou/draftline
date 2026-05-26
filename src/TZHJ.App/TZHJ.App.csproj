@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TZHJ.App —— WPF 桌面客户端（厚客户端）。MVVM + 依赖注入。
+    仅此工程依赖 WPF / Windows，必须在 Windows 上编译运行（net8.0-windows）。
+    当前全用 Mock 网关；真接口到位后改 AddTzhjMockInfrastructure 为真实实现即可，UI 不动。
+    自动更新走 ClickOnce（发布时配置，见 README）。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TZHJ.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="FluentIcons.Wpf" Version="2.1.328" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TZHJ.Core\TZHJ.Core.csproj" />
+    <ProjectReference Include="..\TZHJ.Infrastructure\TZHJ.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

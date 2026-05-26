@@ -1,0 +1,83 @@
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using FluentIcons.Common;
+using TZHJ.App.Services;
+using TZHJ.Core.Enums;
+
+namespace TZHJ.App.ViewModels;
+
+/// <summary>
+/// 外壳：侧边栏（映射本地文件夹的两流程功能区 + 系统）+ 内容区。两流程严格隔离，分两组展示。
+/// </summary>
+public sealed partial class ShellViewModel : ObservableObject
+{
+    private readonly INavigationService _nav;
+
+    [ObservableProperty] private ViewModelBase? _currentPage;
+    [ObservableProperty] private NavItem? _selectedItem;
+
+    public IReadOnlyList<NavGroup> Groups { get; }
+    public string OperatorDisplay { get; }
+
+    public ShellViewModel(INavigationService nav, ISession session)
+    {
+        _nav = nav;
+        _nav.CurrentChanged += vm => CurrentPage = vm;
+
+        var op = session.Operator;
+        OperatorDisplay = $"{op.DisplayName} · 工号 {op.EmployeeId} · {op.Department} / {op.Position}";
+
+        var groups = new List<NavGroup>();
+        if (op.CanAccess(FlowType.Pricing)) groups.Add(BuildFlowGroup("图纸核价", FlowType.Pricing));
+        if (op.CanAccess(FlowType.DrawingSelection)) groups.Add(BuildFlowGroup("挑图纸", FlowType.DrawingSelection));
+        groups.Add(new NavGroup
+        {
+            Header = "系统",
+            Items = new[]
+            {
+                new NavItem { Title = "采集计划", Icon = Symbol.CalendarClock, Navigate = () => _nav.ToSchedule() },
+                new NavItem { Title = "设置", Icon = Symbol.Settings, Navigate = () => _nav.ToSettings() },
+            },
+        });
+        Groups = groups;
+
+        // 默认进第一组的"待处理"。
+        if (Groups[0].Items.Count > 0)
+            Select(Groups[0].Items[0]);
+    }
+
+    private NavGroup BuildFlowGroup(string header, FlowType flow) => new()
+    {
+        Header = header,
+        Items = new[]
+        {
+            new NavItem { Title = "待处理", Icon = Symbol.DocumentBulletList, Navigate = () => _nav.ToBatchList(flow, BatchLocation.Todo) },
+            new NavItem { Title = "已处理", Icon = Symbol.CheckmarkCircle, Navigate = () => _nav.ToBatchList(flow, BatchLocation.Done) },
+            new NavItem { Title = "异常待跟进", Icon = Symbol.Warning, Navigate = () => _nav.ToExceptions(flow) },
+        },
+    };
+
+    [RelayCommand]
+    private void Select(NavItem item)
+    {
+        if (SelectedItem is not null) SelectedItem.IsSelected = false;
+        SelectedItem = item;
+        item.IsSelected = true;
+        item.Navigate();
+    }
+}
+
+public sealed partial class NavItem : ObservableObject
+{
+    public required string Title { get; init; }
+    public required Symbol Icon { get; init; }
+    public required Action Navigate { get; init; }
+
+    [ObservableProperty] private bool _isSelected;
+}
+
+public sealed class NavGroup
+{
+    public required string Header { get; init; }
+    public required IReadOnlyList<NavItem> Items { get; init; }
+}

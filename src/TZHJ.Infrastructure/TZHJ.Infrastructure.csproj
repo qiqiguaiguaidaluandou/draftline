@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    TZHJ.Infrastructure —— 契约的具体实现：
+      · Mock 网关（无外部接口时顶上：造数 / 模拟回传 / 占位登录 / 默认配置）
+      · 本地批次存储（落本地、读写 xlsx、manifest、待处理→已处理 移目录、异常池、完整性校验）
+    跨平台、无 WPF 依赖：Linux 上也能编译、被样例生成器调用。
+    真接口到位后，新增 Http* 网关实现并替换 DI 注册即可，本工程的存储部分不动。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>TZHJ.Infrastructure</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TZHJ.Core\TZHJ.Core.csproj" />
+  </ItemGroup>
+
+</Project>

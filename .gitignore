@@ -1,0 +1,19 @@
+## .NET build output
+bin/
+obj/
+[Bb]uild/
+*.user
+*.suo
+
+## Rider / VS
+.vs/
+.idea/
+*.DotSettings.user
+
+## Local sample data (generated)
+/TZHJ_Data/
+TZHJ_Data/
+
+## OS
+.DS_Store
+Thumbs.db

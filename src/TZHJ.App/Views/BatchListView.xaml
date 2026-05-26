@@ -1,0 +1,72 @@
+<UserControl x:Class="TZHJ.App.Views.BatchListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="clr-namespace:FluentIcons.Wpf;assembly=FluentIcons.Wpf"
+             Loaded="OnLoaded" FontFamily="Microsoft YaHei" FontSize="13">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- 页头 -->
+    <Border Grid.Row="0" Background="{StaticResource HeaderBg}" BorderBrush="{StaticResource Border1}" BorderThickness="0,0,0,1" Padding="24,16">
+      <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+    </Border>
+
+    <!-- 工具栏 -->
+    <DockPanel Grid.Row="1" Margin="24,14,24,8" LastChildFill="False">
+      <TextBlock DockPanel.Dock="Left" Text="{Binding LocationRootPath}" Foreground="{StaticResource TextMuted}"
+                 FontFamily="Consolas" VerticalAlignment="Center" Margin="0,0,10,0" />
+      <Button DockPanel.Dock="Left" Command="{Binding OpenLocationFolderCommand}">
+        <StackPanel Orientation="Horizontal">
+          <fi:SymbolIcon Symbol="FolderOpen" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+          <TextBlock Text="打开文件夹" Margin="6,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+      <Button DockPanel.Dock="Right" Command="{Binding ManualFetchCommand}"
+              Visibility="{Binding IsTodo, Converter={StaticResource BoolToVis}}">
+        <StackPanel Orientation="Horizontal">
+          <fi:SymbolIcon Symbol="ArrowSync" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+          <TextBlock Text="手动更新" Margin="6,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+      <Button DockPanel.Dock="Right" Command="{Binding RefreshCommand}">
+        <StackPanel Orientation="Horizontal">
+          <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+          <TextBlock Text="刷新" Margin="6,0,0,0" VerticalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </DockPanel>
+
+    <!-- 批次列表 -->
+    <DataGrid Grid.Row="2" Margin="24,0,24,20" ItemsSource="{Binding Batches}" IsReadOnly="True">
+      <DataGrid.Columns>
+        <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="220" />
+        <DataGridTextColumn Header="本地文件夹" Binding="{Binding FolderName}" Width="*" />
+        <DataGridTextColumn Header="物料数" Binding="{Binding MaterialCount}" Width="80" />
+        <DataGridTextColumn Header="进度 / 统计" Binding="{Binding ProgressText}" Width="140" />
+        <DataGridTextColumn Header="状态" Binding="{Binding StatusText}" Width="90" />
+        <DataGridTextColumn Header="拉取" Binding="{Binding FetchedText}" Width="100" />
+        <DataGridTextColumn Header="完成" Binding="{Binding SubmittedText}" Width="100" />
+        <DataGridTemplateColumn Header="操作" Width="170">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <StackPanel Orientation="Horizontal">
+                <Button Content="打开表单" Style="{StaticResource BtnPrimary}" Padding="10,3"
+                        Command="{Binding DataContext.OpenBatchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}" />
+                <Button Style="{StaticResource BtnSubtle}" Padding="6"
+                        Command="{Binding DataContext.OpenBatchFolderCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}">
+                  <fi:SymbolIcon Symbol="FolderOpen" FontSize="16" Foreground="{StaticResource TextSecondary}" />
+                </Button>
+              </StackPanel>
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+      </DataGrid.Columns>
+    </DataGrid>
+  </Grid>
+</UserControl>

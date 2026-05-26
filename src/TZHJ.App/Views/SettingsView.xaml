@@ -1,0 +1,55 @@
+<UserControl x:Class="TZHJ.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="clr-namespace:FluentIcons.Wpf;assembly=FluentIcons.Wpf"
+             FontFamily="Microsoft YaHei" FontSize="13">
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <Border Grid.Row="0" Background="{StaticResource HeaderBg}" BorderBrush="{StaticResource Border1}" BorderThickness="0,0,0,1" Padding="24,16">
+      <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+    </Border>
+
+    <StackPanel Grid.Row="1" Margin="24,18" MaxWidth="780" HorizontalAlignment="Left">
+      <Border Style="{StaticResource Card}" Padding="18">
+        <StackPanel>
+          <DockPanel Margin="0,5">
+            <TextBlock DockPanel.Dock="Left" Text="当前操作员（本机固定）：" Foreground="{StaticResource TextMuted}" Width="170" />
+            <TextBlock Text="{Binding OperatorText}" FontWeight="SemiBold" />
+          </DockPanel>
+          <DockPanel Margin="0,5">
+            <TextBlock DockPanel.Dock="Left" Text="本地数据根目录：" Foreground="{StaticResource TextMuted}" Width="170" />
+            <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding OpenRootCommand}">
+              <StackPanel Orientation="Horizontal">
+                <fi:SymbolIcon Symbol="FolderOpen" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                <TextBlock Text="打开" Margin="6,0,0,0" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <TextBlock Text="{Binding LocalRoot}" FontFamily="Consolas" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel Margin="0,5">
+            <TextBlock DockPanel.Dock="Left" Text="后端网关地址：" Foreground="{StaticResource TextMuted}" Width="170" />
+            <TextBlock Text="{Binding GatewayUrl}" FontFamily="Consolas" />
+          </DockPanel>
+          <DockPanel Margin="0,5">
+            <TextBlock DockPanel.Dock="Left" Text="图纸查看：" Foreground="{StaticResource TextMuted}" Width="170" />
+            <TextBlock Text="到本地批次文件夹自行用本机软件打开（软件不内嵌看图，PDF/STEP 走系统默认关联）" TextWrapping="Wrap" />
+          </DockPanel>
+          <DockPanel Margin="0,5">
+            <TextBlock DockPanel.Dock="Left" Text="客户端版本：" Foreground="{StaticResource TextMuted}" Width="170" />
+            <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding CheckUpdateCommand}">
+              <StackPanel Orientation="Horizontal">
+                <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                <TextBlock Text="检查更新" Margin="6,0,0,0" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <TextBlock Text="{Binding Version}" VerticalAlignment="Center" />
+          </DockPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </Grid>
+</UserControl>
