@@ -34,12 +34,15 @@ public partial class App : Application
 
         if (useMock)
         {
-            // 无接口先开发：全用 Mock。真接口到位后换成 AddTzhjHttpInfrastructure(...) 即可，下方 UI/VM 不动。
+            // 离线模式：全用 Mock 造数，无需后端。下方 UI/VM 与此切换无关。
             services.AddTzhjMockInfrastructure(mock);
         }
         else
         {
-            throw new NotSupportedException("真实网关尚未接入；当前请设 appsettings.json 的 UseMock=true。");
+            // 真 HTTP 链路：连后端 TZHJ.Gateway（取数/回传/认证/配置）。UI/VM 不动。
+            var http = new HttpOptions();
+            config.GetSection("Http").Bind(http);
+            services.AddTzhjHttpInfrastructure(http);
         }
 
         // 应用层服务
