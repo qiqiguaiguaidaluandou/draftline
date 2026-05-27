@@ -137,6 +137,14 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     {
         if (_batch is null) return;
 
+        // 提交闸门二次校验（防御 UI 状态与模型短暂不一致）：仍有「待处理」行则中止。
+        if (Rows.Count == 0 || Rows.Any(r => r.Status == RowStatus.Pending))
+        {
+            _dialog.Error("仍有「待处理」行，请先填写或挂起异常后再整批提交。");
+            Recompute();
+            return;
+        }
+
         var normal = Rows.Where(r => r.Status != RowStatus.Exception).ToList();
         var exceptions = Rows.Where(r => r.Status == RowStatus.Exception).ToList();
 

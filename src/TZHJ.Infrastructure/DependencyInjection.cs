@@ -4,6 +4,7 @@ using TZHJ.Infrastructure.Gateways.Http;
 using TZHJ.Infrastructure.Gateways.Mock;
 using TZHJ.Infrastructure.Options;
 using TZHJ.Infrastructure.Storage;
+using TZHJ.Infrastructure.Sync;
 
 namespace TZHJ.Infrastructure;
 
@@ -22,11 +23,15 @@ public static class DependencyInjection
         services.AddSingleton<DefaultFieldProvider>();
         services.AddSingleton<IFieldProvider>(sp => sp.GetRequiredService<DefaultFieldProvider>());
 
-        // 三个对外边界 + 配置下发：当前全为 Mock。
+        // 对外边界 + 配置下发 + 审计查询：当前全为 Mock。
         services.AddSingleton<IAuthGateway, MockAuthGateway>();
         services.AddSingleton<IConfigGateway, MockConfigGateway>();
         services.AddSingleton<IDataGateway, MockDataGateway>();
         services.AddSingleton<ISubmitGateway, MockSubmitGateway>();
+        services.AddSingleton<IAuditGateway, MockAuditGateway>();
+
+        // 补拉编排（手动/登录/会话内定时共用；纯逻辑，跨平台可测）。
+        services.AddSingleton<BatchSyncService>();
 
         // 本地存储（非网关，真接口上线后不变）。
         services.AddSingleton<ILocalBatchStore, LocalBatchStore>();
@@ -61,6 +66,10 @@ public static class DependencyInjection
         services.AddHttpClient<IConfigGateway, HttpConfigGateway>(Configure).AddHttpMessageHandler<AuthTokenHandler>();
         services.AddHttpClient<IDataGateway, HttpDataGateway>(Configure).AddHttpMessageHandler<AuthTokenHandler>();
         services.AddHttpClient<ISubmitGateway, HttpSubmitGateway>(Configure).AddHttpMessageHandler<AuthTokenHandler>();
+        services.AddHttpClient<IAuditGateway, HttpAuditGateway>(Configure).AddHttpMessageHandler<AuthTokenHandler>();
+
+        // 补拉编排（手动/登录/会话内定时共用；纯逻辑，跨平台可测）。
+        services.AddSingleton<BatchSyncService>();
 
         // 本地存储（不变）。
         services.AddSingleton<ILocalBatchStore, LocalBatchStore>();

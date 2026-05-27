@@ -1,10 +1,13 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TZHJ.App.Services;
 using TZHJ.Core.Contracts;
 using TZHJ.Core.Enums;
 using TZHJ.Core.Models;
+using TZHJ.Infrastructure.Sync;
 
 namespace TZHJ.App.ViewModels;
 
@@ -15,7 +18,7 @@ namespace TZHJ.App.ViewModels;
 public sealed partial class BatchListViewModel : ViewModelBase
 {
     private readonly ILocalBatchStore _store;
-    private readonly IDataGateway _data;
+    private readonly BatchSyncService _sync;
     private readonly ISession _session;
     private readonly INavigationService _nav;
     private readonly IDialogService _dialog;
@@ -24,13 +27,16 @@ public sealed partial class BatchListViewModel : ViewModelBase
     private readonly FlowType _flow;
     private readonly BatchLocation _location;
 
+    private FileSystemWatcher? _watcher;
+    private CancellationTokenSource? _refreshDebounce;
+
     public BatchListViewModel(
-        ILocalBatchStore store, IDataGateway data, ISession session,
+        ILocalBatchStore store, BatchSyncService sync, ISession session,
         INavigationService nav, IDialogService dialog, IExplorerService explorer,
         FlowType flow, BatchLocation location)
     {
         _store = store;
-        _data = data;
+        _sync = sync;
         _session = session;
         _nav = nav;
         _dialog = dialog;
@@ -43,6 +49,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
         Title = $"{flowName} · {locName}";
         IsTodo = location == BatchLocation.Todo;
         LocationRootPath = LocalPaths.LocationRoot(_session.Config.LocalRoot, flow, session.Operator.EmployeeId, location);
+        StartWatching();
     }
 
     public bool IsTodo { get; }
@@ -76,31 +83,20 @@ public sealed partial class BatchListViewModel : ViewModelBase
     private void OpenBatch(BatchRowVM row) =>
         _nav.ToBatchWork(_flow, _location, row.Batch.FolderName);
 
-    /// <summary>手动补拉：对配置的时间窗逐个检查本地是否已有，缺的就取数落本地（演示取数链路）。</summary>
+    /// <summary>手动补拉：经 BatchSyncService 补齐"已关闭、本地无、审计未命中"的窗（与登录补拉/会话内定时同一套逻辑）。</summary>
     [RelayCommand]
     private async Task ManualFetch()
     {
         if (!IsTodo) return;
         IsBusy = true;
-        var fetched = 0;
         try
         {
-            var emp = _session.Operator.EmployeeId;
-            foreach (var (start, end) in RecentWindows())
-            {
-                if (_store.BatchExists(_flow, emp, start, end)) continue;
-                var result = await _data.FetchBatchAsync(new FetchRequest
-                {
-                    EmployeeId = emp, Flow = _flow, WindowStart = start, WindowEnd = end,
-                });
-                if (result.Success)
-                {
-                    await _store.WriteFetchedBatchAsync(result);
-                    fetched++;
-                }
-            }
+            var windows = _session.Config.WindowsFor(_flow);
+            var result = await _sync.SyncAsync(_flow, _session.Operator.EmployeeId, windows, DateTime.Now);
             await LoadAsync();
-            if (fetched > 0) _dialog.Success($"补拉完成，新增 {fetched} 个批次。");
+
+            if (result.Fetched > 0) _dialog.Success($"补拉完成，新增 {result.Fetched} 个批次。");
+            else if (result.Failed > 0) _dialog.Error($"补拉部分失败：{result.Failed} 个窗口取数未成功，请重试。");
             else _dialog.Info("本地已是最新，无需补拉。");
         }
         catch (Exception ex)
@@ -110,23 +106,61 @@ public sealed partial class BatchListViewModel : ViewModelBase
         finally { IsBusy = false; }
     }
 
-    /// <summary>
-    /// 可补拉的最近时间窗：只取**已关闭（已到触发时刻）**的窗——窗口关闭后才触发取数（见 CollectionWindow.TriggerTime，含登录补拉）。
-    /// 尚未关闭（如当前正处其中）或整段在未来的窗一律不取，避免拉到不完整/还没发生的数据。
-    /// </summary>
-    private IEnumerable<(DateTime Start, DateTime End)> RecentWindows()
+    // ---------- 文件夹即真相源：FileSystemWatcher 同步 ----------
+
+    /// <summary>监视本位置目录的子目录增删/改名，外部变化去抖后自动刷新列表。
+    /// 删除走甲案：如实同步（该批次从列表消失）、不阻止、不做持久作废标记。</summary>
+    private void StartWatching()
     {
-        var defs = _session.Config.WindowsFor(_flow);
-        var today = DateOnly.FromDateTime(DateTime.Today);
-        var now = DateTime.Now;
-        var list = new List<(DateTime, DateTime)>();
-        foreach (var anchor in new[] { today, today.AddDays(-1) })
-            foreach (var w in defs.Where(w => w.Enabled))
+        try
+        {
+            Directory.CreateDirectory(LocationRootPath); // 目录可能尚未建（无批次时），监视前确保存在
+            _watcher = new FileSystemWatcher(LocationRootPath)
             {
-                if (anchor.ToDateTime(w.TriggerTime) > now) continue; // 未到触发时刻：窗口未关闭，不补拉
-                list.Add(w.Resolve(anchor));
-            }
-        return list.OrderByDescending(x => x.Item2);
+                NotifyFilter = NotifyFilters.DirectoryName,
+                IncludeSubdirectories = false,
+            };
+            _watcher.Created += OnFolderChanged;
+            _watcher.Deleted += OnFolderChanged;
+            _watcher.Renamed += OnFolderChanged;
+            _watcher.EnableRaisingEvents = true;
+        }
+        catch
+        {
+            _watcher = null; // 监视起不来不影响列表本身（仍可手动刷新）
+        }
+    }
+
+    private void OnFolderChanged(object sender, FileSystemEventArgs e) => ScheduleRefresh();
+
+    /// <summary>去抖：文件操作常成串到达，合并到最后一次后再在 UI 线程刷新。</summary>
+    private void ScheduleRefresh()
+    {
+        _refreshDebounce?.Cancel();
+        _refreshDebounce = new CancellationTokenSource();
+        var token = _refreshDebounce.Token;
+        _ = Application.Current?.Dispatcher.InvokeAsync(async () =>
+        {
+            try { await Task.Delay(300, token); }
+            catch (TaskCanceledException) { return; }
+            if (token.IsCancellationRequested) return;
+            try { await LoadAsync(); }
+            catch { /* 刷新失败不崩溃 */ }
+        });
+    }
+
+    public override void Dispose()
+    {
+        _refreshDebounce?.Cancel();
+        if (_watcher is not null)
+        {
+            _watcher.EnableRaisingEvents = false;
+            _watcher.Created -= OnFolderChanged;
+            _watcher.Deleted -= OnFolderChanged;
+            _watcher.Renamed -= OnFolderChanged;
+            _watcher.Dispose();
+            _watcher = null;
+        }
     }
 }
 

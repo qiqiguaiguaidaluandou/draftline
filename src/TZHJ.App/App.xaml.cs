@@ -50,6 +50,7 @@ public partial class App : Application
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<IExplorerService, ExplorerService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<SessionSyncScheduler>();
 
         // ViewModel / 窗口（BatchList/Work/Exception/Schedule/Settings 由 NavigationService 用
         // ActivatorUtilities 按需创建，无需在此注册）
@@ -68,6 +69,9 @@ public partial class App : Application
             MainWindow = shell;
             ShutdownMode = ShutdownMode.OnMainWindowClose;
             shell.Show();
+
+            // 登录后启动会话内取数调度：立即登录补拉 + 每 120s 会话内定时触发（不卡界面）。
+            Services.GetRequiredService<SessionSyncScheduler>().Start();
         }
         else
         {
