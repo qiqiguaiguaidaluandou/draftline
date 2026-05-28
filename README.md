@@ -83,7 +83,22 @@ UI、ViewModel、本地存储**均不改动**。
 
 ## 自动更新
 
-按方案选型走 **ClickOnce**，发布时配置（本骨架未含发布配置）。
+按方案选型走 **ClickOnce**。发布配置在 `src/TZHJ.App/Properties/PublishProfiles/ClickOnceProfile.pubxml`
+（普通 `dotnet build` 不读它，只在显式发布时生效，故不影响日常编译 / CI）。
+
+**在 Windows 上发布**（需 .NET 8 SDK）：
+
+```powershell
+dotnet publish src/TZHJ.App/TZHJ.App.csproj -p:PublishProfile=ClickOnceProfile
+```
+
+或在 Visual Studio 右键 `TZHJ.App` → 发布 → 选 `ClickOnceProfile`。
+
+上线前要改 `.pubxml` 里两处占位：`PublishUrl` / `InstallUrl` 指向真实发布目标（文件共享
+`\\server\share\TZHJ` 或 https 站点）。更新策略已设为 **启动前同步检查**（`UpdateMode=Foreground`）——
+管理员发一次新版，所有客户端下次启动即拉到最新（呼应"改一处、不逐台重打包"）。**每次发布请递增
+`ApplicationVersion` 末位**，客户端才能检测到新版本。框架依赖发布默认需目标机有 .NET 8 桌面运行时
+（Bootstrapper 可代装）；想免预装可在 `.pubxml` 把 `SelfContained` 改 `true`（体积更大）。
 
 ## 与外部系统待确认项（来自 `docs/方案设计.md` §9，影响最终回传/取数实现）
 

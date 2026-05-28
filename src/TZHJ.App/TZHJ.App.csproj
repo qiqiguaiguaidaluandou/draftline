@@ -4,7 +4,7 @@
     TZHJ.App —— WPF 桌面客户端（厚客户端）。MVVM + 依赖注入。
     仅此工程依赖 WPF / Windows，必须在 Windows 上编译运行（net8.0-windows）。
     当前全用 Mock 网关；真接口到位后改 AddTzhjMockInfrastructure 为真实实现即可，UI 不动。
-    自动更新走 ClickOnce（发布时配置，见 README）。
+    自动更新走 ClickOnce：发布配置见 Properties/PublishProfiles/ClickOnceProfile.pubxml 与 README「自动更新」。
   -->
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -15,6 +15,12 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>TZHJ.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- 应用标识：进入 ClickOnce 清单/「添加删除程序」与可执行文件版本信息。 -->
+    <Product>图纸核价 / 挑图纸客户端</Product>
+    <Company>图纸核价系统</Company>
+    <AssemblyTitle>TZHJ 客户端</AssemblyTitle>
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

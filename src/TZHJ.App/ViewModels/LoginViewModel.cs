@@ -64,7 +64,7 @@ public sealed partial class LoginViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            Error = $"登录异常：{ex.Message}";
+            Error = FriendlyError.Describe(ex, "登录");
         }
         finally
         {

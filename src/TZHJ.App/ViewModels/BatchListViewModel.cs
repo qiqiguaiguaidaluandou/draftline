@@ -101,7 +101,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            _dialog.Error($"补拉失败：{ex.Message}");
+            _dialog.Error(FriendlyError.Describe(ex, "补拉"));
         }
         finally { IsBusy = false; }
     }

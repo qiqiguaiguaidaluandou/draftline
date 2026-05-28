@@ -204,7 +204,8 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            _dialog.Error($"上传异常：{ex.Message}");
+            // 断网/超时/服务器报错翻成操作员可读提示；批次未移入「已处理」，可原样重试。
+            _dialog.Error(FriendlyError.Describe(ex, "回传"));
         }
         finally { IsBusy = false; }
     }
