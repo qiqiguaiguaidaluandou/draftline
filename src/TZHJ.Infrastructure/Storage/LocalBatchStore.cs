@@ -59,7 +59,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
                         Status = m.Status,
                         ExceptionReason = m.ExceptionReason,
                     }).ToList()
-                    : LoadRowsFromXlsx(sub, flow); // 无 manifest：从 xlsx 数行，状态默认待处理
+                    : LoadRowsFromXlsx(sub, folderName, flow); // 无 manifest：从 xlsx 数行，状态默认待处理
 
                 batches.Add(new Batch
                 {
@@ -90,7 +90,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
         if (!LocalPaths.TryParseFolderName(folderName, out var start, out var end)) return null;
 
         var fields = _fields.FieldsFor(flow);
-        var xlsxRows = ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbook), fields);
+        var xlsxRows = ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields);
         var manifest = await BatchManifest.LoadAsync(Path.Combine(dir, LocalFolders.Manifest), ct);
         var manifestByKey = manifest?.Rows.ToDictionary(m => m.RowKey) ?? new();
 
@@ -175,7 +175,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
             });
         }
 
-        ExcelGridIO.Write(Path.Combine(dir, LocalFolders.GridWorkbook), fields, rows);
+        ExcelGridIO.Write(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields, rows);
 
         var manifest = new BatchManifest
         {
@@ -207,7 +207,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
     public async Task SaveBatchAsync(Batch batch, CancellationToken ct = default)
     {
         var fields = _fields.FieldsFor(batch.Flow);
-        ExcelGridIO.Write(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbook), fields, batch.Rows);
+        ExcelGridIO.Write(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbookName(batch.FolderName)), fields, batch.Rows);
 
         var manifestPath = Path.Combine(batch.FolderPath, LocalFolders.Manifest);
         var manifest = await BatchManifest.LoadAsync(manifestPath, ct) ?? new BatchManifest
@@ -293,10 +293,10 @@ public sealed class LocalBatchStore : ILocalBatchStore
         return await JsonSerializer.DeserializeAsync<List<ExceptionItem>>(fs, JsonOpts, ct) ?? new();
     }
 
-    private List<MaterialRow> LoadRowsFromXlsx(string dir, FlowType flow)
+    private List<MaterialRow> LoadRowsFromXlsx(string dir, string folderName, FlowType flow)
     {
         var fields = _fields.FieldsFor(flow);
-        return ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbook), fields)
+        return ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields)
             .Select(x => new MaterialRow { RowKey = x.RowKey, Values = x.Values, Status = RowStatus.Pending })
             .ToList();
     }
@@ -312,13 +312,9 @@ public sealed class LocalBatchStore : ILocalBatchStore
     private static IEnumerable<string> ScanDrawings(string dir, string materialCode)
     {
         var prefix = materialCode + "__";
+        // 物料编码作前缀已能将 xlsx 排除（不以编码起头），无需再硬编码表格文件名。
         return Directory.EnumerateFiles(dir)
-            .Where(f =>
-            {
-                var name = Path.GetFileName(f);
-                return name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
-                       && !name.Equals(LocalFolders.GridWorkbook, StringComparison.OrdinalIgnoreCase);
-            });
+            .Where(f => Path.GetFileName(f).StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
     }
 
     private static string? DisplayNameOf(IReadOnlyDictionary<string, string?> values)

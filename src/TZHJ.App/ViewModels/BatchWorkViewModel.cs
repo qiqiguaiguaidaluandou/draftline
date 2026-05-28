@@ -129,7 +129,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     {
         if (_batch is null || IsReadOnly) return;
         await _store.SaveBatchAsync(_batch);
-        _dialog.Success("已写回 清单表格.xlsx（暂存）。");
+        _dialog.Success("已写回本批次表格（暂存）。");
     }
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]

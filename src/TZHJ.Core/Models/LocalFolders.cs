@@ -15,8 +15,8 @@ public static class LocalFolders
     public const string Done = "已处理";
     public const string ExceptionPool = "异常待跟进";
 
-    /// <summary>批次目录内的表格文件名（料号 + 只读字段 + 待填列）。</summary>
-    public const string GridWorkbook = "清单表格.xlsx";
+    /// <summary>批次目录内表格文件名（与批次目录同名，便于离开目录后仍能识别批次）。</summary>
+    public static string GridWorkbookName(string batchFolderName) => batchFolderName + ".xlsx";
 
     /// <summary>批次目录内的 sidecar：行级状态/异常原因/来源/取数时间等（manifest）。</summary>
     public const string Manifest = "_manifest.json";

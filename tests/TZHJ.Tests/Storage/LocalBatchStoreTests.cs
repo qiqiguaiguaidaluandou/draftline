@@ -49,10 +49,20 @@ public class LocalBatchStoreTests : IDisposable
         var batch = await _store.WriteFetchedBatchAsync(SampleFetch());
 
         Assert.Equal(BatchLocation.Todo, batch.Location);
-        Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbook)));
+        Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbookName(batch.FolderName))));
         Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.Manifest)));
         Assert.True(File.Exists(Path.Combine(batch.FolderPath, "M-1__件1.pdf")));
         Assert.True(_store.BatchExists(FlowType.Pricing, Emp, Ws, We));
+    }
+
+    [Fact]
+    public async Task Xlsx_filename_equals_batch_folder_name()
+    {
+        var batch = await _store.WriteFetchedBatchAsync(SampleFetch());
+
+        var xlsxFiles = Directory.GetFiles(batch.FolderPath, "*.xlsx");
+        Assert.Single(xlsxFiles);
+        Assert.Equal(batch.FolderName + ".xlsx", Path.GetFileName(xlsxFiles[0]));
     }
 
     [Fact]
