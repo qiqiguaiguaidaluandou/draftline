@@ -101,7 +101,7 @@ public sealed class RowViewModel : ObservableObject
     public string StatusKind => _row.Status switch
     {
         RowStatus.Pending => "Gray",
-        RowStatus.Done => "Blue",
+        RowStatus.Done => "Green",
         RowStatus.Exception => "Orange",
         RowStatus.Uploaded => "Green",
         _ => "Gray",
