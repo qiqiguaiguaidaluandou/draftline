@@ -136,6 +136,54 @@
     </Setter>
   </Style>
 
+  <!-- 按钮：链接样式（行内可点文字，如把文件夹名做成"打开表单"的入口）。无边框透明、强调色、悬停下划线 -->
+  <Style x:Key="BtnLink" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{StaticResource Accent}" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="Margin" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <TextBlock x:Name="txt" Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis"
+                     Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" />
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="txt" Property="TextDecorations" Value="Underline" />
+              <Setter Property="Foreground" Value="{StaticResource AccentDark}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
+  <!-- 侧边栏分组标题：可点折叠开关。无边框透明、左对齐、悬停淡底 -->
+  <Style x:Key="GroupHeader" TargetType="Button" BasedOn="{StaticResource BtnBase}">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="10,4" />
+    <Setter Property="Margin" Value="0,0,0,2" />
+    <Setter Property="Template">
+      <Setter.Value>
+        <ControlTemplate TargetType="Button">
+          <Border x:Name="bd" CornerRadius="7" Background="{TemplateBinding Background}">
+            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              Margin="{TemplateBinding Padding}" />
+          </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+              <Setter TargetName="bd" Property="Background" Value="{StaticResource HoverBg}" />
+            </Trigger>
+          </ControlTemplate.Triggers>
+        </ControlTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
+
   <!-- 侧边栏导航项 -->
   <Style x:Key="NavButton" TargetType="Button" BasedOn="{StaticResource BtnBase}">
     <Setter Property="HorizontalContentAlignment" Value="Left" />

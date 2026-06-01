@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Media;
+using FluentIcons.Common;
 
 namespace TZHJ.App.Converters;
 
@@ -64,6 +65,16 @@ public sealed class InverseBoolConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => value is not true;
+}
+
+/// <summary>分组展开态 → 折叠箭头：展开=ChevronDown(朝下)、收起=ChevronRight(朝右)。</summary>
+public sealed class BoolToChevronConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        => value is true ? Symbol.ChevronDown : Symbol.ChevronRight;
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        => throw new NotSupportedException();
 }
 
 /// <summary>非空字符串 → Visible，否则 Collapsed。</summary>

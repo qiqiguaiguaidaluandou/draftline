@@ -48,7 +48,16 @@
       <DataGrid.Columns>
         <!-- 全部列固定宽度：每列按内容给足，谁都不会被挤压；总宽超出窗口时由 DataGrid 出横向滚动条。不用弹性 * -->
         <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="240" />
-        <DataGridTextColumn Header="本地文件夹" Binding="{Binding FolderName}" Width="250" />
+        <!-- 文件夹名做成可点链接：点它=点"打开表单"，进入表单作业界面 -->
+        <DataGridTemplateColumn Header="本地文件夹" Width="250">
+          <DataGridTemplateColumn.CellTemplate>
+            <DataTemplate>
+              <Button Style="{StaticResource BtnLink}" Content="{Binding FolderName}" ToolTip="打开表单作业"
+                      Command="{Binding DataContext.OpenBatchCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
         <DataGridTextColumn Header="物料数" Binding="{Binding MaterialCount}" Width="80" />
         <DataGridTextColumn Header="进度 / 统计" Binding="{Binding ProgressText}" Width="140" />
         <DataGridTemplateColumn Header="状态" Width="90">

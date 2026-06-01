@@ -111,9 +111,20 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
                   <StackPanel Margin="0,0,0,14">
-                    <TextBlock Text="{Binding Header}" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"
-                               Margin="10,4,0,4" />
-                    <ItemsControl ItemsSource="{Binding Items}">
+                    <!-- 组标题=折叠开关：点它展开/收起组内项；箭头随状态朝下/朝右 -->
+                    <Button Style="{StaticResource GroupHeader}"
+                            Command="{Binding DataContext.ToggleGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                            CommandParameter="{Binding}">
+                      <DockPanel>
+                        <fi:SymbolIcon DockPanel.Dock="Right"
+                                       Symbol="{Binding IsExpanded, Converter={StaticResource BoolToChevron}}"
+                                       FontSize="12" Foreground="{StaticResource TextMuted}" VerticalAlignment="Center" Margin="0,0,4,0" />
+                        <TextBlock Text="{Binding Header}" Foreground="{StaticResource TextMuted}" FontSize="11" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" />
+                      </DockPanel>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding Items}"
+                                  Visibility="{Binding IsExpanded, Converter={StaticResource BoolToVis}}">
                       <ItemsControl.ItemTemplate>
                         <DataTemplate>
                           <Button Style="{StaticResource NavButton}"

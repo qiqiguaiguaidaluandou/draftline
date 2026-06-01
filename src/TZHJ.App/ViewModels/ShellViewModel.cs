@@ -51,10 +51,17 @@ public sealed partial class ShellViewModel : ObservableObject
         });
         Groups = groups;
 
+        // 默认只展开当前选中项所在那组（=第一组"图纸核价"），其余收起，保持初始干净。
+        for (var i = 1; i < Groups.Count; i++) Groups[i].IsExpanded = false;
+
         // 默认进第一组的"待处理"。
         if (Groups[0].Items.Count > 0)
             Select(Groups[0].Items[0]);
     }
+
+    /// <summary>折叠/展开侧边栏分组（各组独立，互不影响）。</summary>
+    [RelayCommand]
+    private static void ToggleGroup(NavGroup group) => group.IsExpanded = !group.IsExpanded;
 
     private NavGroup BuildFlowGroup(string header, FlowType flow) => new()
     {
@@ -89,8 +96,11 @@ public sealed partial class NavItem : ObservableObject
     [ObservableProperty] private bool _isSelected;
 }
 
-public sealed class NavGroup
+public sealed partial class NavGroup : ObservableObject
 {
     public required string Header { get; init; }
     public required IReadOnlyList<NavItem> Items { get; init; }
+
+    /// <summary>侧边栏分组是否展开（折叠开关）。各组独立，默认仅含选中项的组展开。</summary>
+    [ObservableProperty] private bool _isExpanded = true;
 }
