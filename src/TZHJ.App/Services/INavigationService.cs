@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using TZHJ.App.ViewModels;
 using TZHJ.Core.Enums;
+using TZHJ.Core.Models;
 
 namespace TZHJ.App.Services;
 
@@ -15,6 +16,7 @@ public interface INavigationService
     void ToBatchList(FlowType flow, BatchLocation location);
     void ToBatchWork(FlowType flow, BatchLocation location, string folderName);
     void ToExceptions(FlowType flow);
+    void ToExceptionResolve(FlowType flow, ExceptionItem exception);
     void ToSchedule();
     void ToSettings();
 }
@@ -35,6 +37,9 @@ public sealed class NavigationService : INavigationService
 
     public void ToExceptions(FlowType flow) =>
         Raise(ActivatorUtilities.CreateInstance<ExceptionPoolViewModel>(_sp, flow));
+
+    public void ToExceptionResolve(FlowType flow, ExceptionItem exception) =>
+        Raise(ActivatorUtilities.CreateInstance<ExceptionResolveViewModel>(_sp, flow, exception));
 
     public void ToSchedule() =>
         Raise(ActivatorUtilities.CreateInstance<ScheduleViewModel>(_sp));

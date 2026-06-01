@@ -29,6 +29,9 @@
       <DataTemplate DataType="{x:Type vm:ExceptionPoolViewModel}">
         <views:ExceptionPoolView />
       </DataTemplate>
+      <DataTemplate DataType="{x:Type vm:ExceptionResolveViewModel}">
+        <views:ExceptionResolveView />
+      </DataTemplate>
       <DataTemplate DataType="{x:Type vm:ScheduleViewModel}">
         <views:ScheduleView />
       </DataTemplate>

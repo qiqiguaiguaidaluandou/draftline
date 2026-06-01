@@ -31,6 +31,9 @@ public interface ILocalBatchStore
     /// <summary>列出异常待跟进池。</summary>
     Task<IReadOnlyList<ExceptionItem>> ListExceptionsAsync(FlowType flow, string employeeId, CancellationToken ct = default);
 
+    /// <summary>从异常待跟进池移除一条（按来源批次 + 行键定位）。单行补回传成功后调用。</summary>
+    Task RemoveExceptionAsync(FlowType flow, string employeeId, string sourceBatch, string rowKey, CancellationToken ct = default);
+
     /// <summary>判断某窗口本地是否已有批次（待处理或已处理），供登录补拉判断"漏数"用。</summary>
     bool BatchExists(FlowType flow, string employeeId, DateTime windowStart, DateTime windowEnd);
 }

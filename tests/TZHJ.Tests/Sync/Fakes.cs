@@ -39,6 +39,7 @@ internal sealed class FakeLocalBatchStore : ILocalBatchStore
     public Task MoveToDoneAsync(Batch batch, CancellationToken ct = default) => throw new NotSupportedException();
     public Task AddExceptionsAsync(FlowType flow, string employeeId, IEnumerable<ExceptionItem> items, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<ExceptionItem>> ListExceptionsAsync(FlowType flow, string employeeId, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task RemoveExceptionAsync(FlowType flow, string employeeId, string sourceBatch, string rowKey, CancellationToken ct = default) => throw new NotSupportedException();
 }
 
 internal sealed class FakeDataGateway : IDataGateway

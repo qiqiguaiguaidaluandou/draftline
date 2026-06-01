@@ -15,13 +15,16 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
     private readonly ILocalBatchStore _store;
     private readonly ISession _session;
     private readonly IExplorerService _explorer;
+    private readonly INavigationService _nav;
     private readonly FlowType _flow;
 
-    public ExceptionPoolViewModel(ILocalBatchStore store, ISession session, IExplorerService explorer, FlowType flow)
+    public ExceptionPoolViewModel(
+        ILocalBatchStore store, ISession session, IExplorerService explorer, INavigationService nav, FlowType flow)
     {
         _store = store;
         _session = session;
         _explorer = explorer;
+        _nav = nav;
         _flow = flow;
 
         Title = $"{(flow == FlowType.Pricing ? "图纸核价" : "挑图纸")} · 异常待跟进";
@@ -48,4 +51,8 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
 
     [RelayCommand]
     private Task Refresh() => LoadAsync();
+
+    /// <summary>补处理：进入该行的全字段补处理页（重填 + 单行补回传）。</summary>
+    [RelayCommand]
+    private void Resolve(ExceptionItem item) => _nav.ToExceptionResolve(_flow, item);
 }

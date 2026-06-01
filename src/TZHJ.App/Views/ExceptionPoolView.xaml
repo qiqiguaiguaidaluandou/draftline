@@ -42,6 +42,15 @@
           <DataGridTextColumn Header="来源批次" Binding="{Binding SourceBatch}" Width="240" />
           <DataGridTextColumn Header="异常原因" Binding="{Binding Reason}" Width="160" />
           <DataGridTextColumn Header="挂起时间" Binding="{Binding SuspendedAt, StringFormat=MM-dd HH:mm}" Width="120" />
+          <DataGridTemplateColumn Header="操作" Width="120">
+            <DataGridTemplateColumn.CellTemplate>
+              <DataTemplate>
+                <Button Content="补处理" Style="{StaticResource BtnPrimary}" Padding="10,3"
+                        Command="{Binding DataContext.ResolveCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                        CommandParameter="{Binding}" />
+              </DataTemplate>
+            </DataGridTemplateColumn.CellTemplate>
+          </DataGridTemplateColumn>
         </DataGrid.Columns>
       </DataGrid>
     </Border>

@@ -277,6 +277,19 @@ public sealed class LocalBatchStore : ILocalBatchStore
         return list.OrderByDescending(e => e.SuspendedAt).ToList();
     }
 
+    public async Task RemoveExceptionAsync(
+        FlowType flow, string employeeId, string sourceBatch, string rowKey, CancellationToken ct = default)
+    {
+        var file = Path.Combine(LocalPaths.ExceptionPoolRoot(Root, flow, employeeId), LocalFolders.ExceptionPoolFile);
+        if (!File.Exists(file)) return;
+
+        var list = (await ReadExceptionsAsync(file, ct)).ToList();
+        if (list.RemoveAll(e => e.SourceBatch == sourceBatch && e.RowKey == rowKey) == 0) return;
+
+        await using var fs = File.Create(file);
+        await JsonSerializer.SerializeAsync(fs, list, JsonOpts, ct);
+    }
+
     public bool BatchExists(FlowType flow, string employeeId, DateTime windowStart, DateTime windowEnd)
     {
         var folderName = LocalPaths.BatchFolderName(windowStart, windowEnd);
