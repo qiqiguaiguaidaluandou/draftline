@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TZHJ.App.Services;
@@ -59,6 +60,9 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
 
     [ObservableProperty] private string _folderPathText = string.Empty;
 
+    /// <summary>自动暂存提示（如"已自动暂存 · 14:03:21"），信息条上轻量展示，不弹 Toast。</summary>
+    [ObservableProperty] private string _autoSaveHint = string.Empty;
+
     public int PendingCount => Rows.Count(r => r.Status == RowStatus.Pending);
     public int DoneCount => Rows.Count(r => r.Status is RowStatus.Done or RowStatus.Uploaded);
     public int ExceptionCount => Rows.Count(r => r.Status == RowStatus.Exception);
@@ -91,7 +95,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
 
             Rows.Clear();
             foreach (var row in _batch.Rows)
-                Rows.Add(new RowViewModel(row, requiredKeys, editableKeys, Recompute, IsReadOnly));
+                Rows.Add(new RowViewModel(row, requiredKeys, editableKeys, OnRowChanged, IsReadOnly));
 
             Recompute();
         }
@@ -105,16 +109,22 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void Back() => _nav.ToBatchList(_flow, _location);
+    private async Task Back()
+    {
+        await FlushAutoSaveAsync(); // 离开前把未落盘的改动写回
+        _nav.ToBatchList(_flow, _location);
+    }
 
     [RelayCommand]
     private void MarkException(RowViewModel row)
     {
+        // 不预填默认原因，由操作员自己写（沿用"原因为空则不挂起"）。
         var reason = _dialog.Prompt("挂起异常", "请填写异常原因：",
-            row.ExceptionReason is { Length: > 0 } ? row.ExceptionReason : "图纸缺失");
+            row.ExceptionReason is { Length: > 0 } ? row.ExceptionReason : null);
         if (string.IsNullOrWhiteSpace(reason)) return;
         row.Suspend(reason);
         Recompute();
+        ScheduleAutoSave();
     }
 
     [RelayCommand]
@@ -122,13 +132,14 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     {
         row.Restore();
         Recompute();
+        ScheduleAutoSave();
     }
 
     [RelayCommand]
     private async Task Save()
     {
         if (_batch is null || IsReadOnly) return;
-        await _store.SaveBatchAsync(_batch);
+        await SaveCoreAsync();
         _dialog.Success("已写回本批次表格（暂存）。");
     }
 
@@ -219,5 +230,77 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         OnPropertyChanged(nameof(CanSubmit));
         OnPropertyChanged(nameof(GateText));
         SubmitCommand.NotifyCanExecuteChanged();
+    }
+
+    // ---------- 自动暂存（填写/挂起后无需手点「暂存」）----------
+
+    private CancellationTokenSource? _autoSaveDebounce;
+    private readonly SemaphoreSlim _saveLock = new(1, 1);
+    private bool _dirty;
+
+    /// <summary>行值改动（编辑待填列）：重算闸门 + 防抖自动暂存。</summary>
+    private void OnRowChanged()
+    {
+        Recompute();
+        ScheduleAutoSave();
+    }
+
+    /// <summary>标脏并防抖：连续输入合并到停手 ~800ms 后才落盘一次，避免每个键都写 xlsx。</summary>
+    private void ScheduleAutoSave()
+    {
+        if (_batch is null || IsReadOnly) return;
+        _dirty = true;
+        _autoSaveDebounce?.Cancel();
+        _autoSaveDebounce = new CancellationTokenSource();
+        var token = _autoSaveDebounce.Token;
+        _ = Application.Current?.Dispatcher.InvokeAsync(async () =>
+        {
+            try { await Task.Delay(800, token); }
+            catch (TaskCanceledException) { return; }
+            if (token.IsCancellationRequested) return;
+            await AutoSaveAsync();
+        });
+    }
+
+    private async Task AutoSaveAsync()
+    {
+        if (!_dirty) return;
+        try
+        {
+            await SaveCoreAsync();
+            AutoSaveHint = $"已自动暂存 · {DateTime.Now:HH:mm:ss}";
+        }
+        catch
+        {
+            // 自动暂存失败不打断填写，只提示；操作员仍可点「暂存」或离开时再尝试。
+            AutoSaveHint = "自动暂存失败，请手动点「暂存」";
+        }
+    }
+
+    /// <summary>离开/关闭前把未落盘改动写回。</summary>
+    private async Task FlushAutoSaveAsync()
+    {
+        _autoSaveDebounce?.Cancel();
+        if (_dirty) await AutoSaveAsync();
+    }
+
+    /// <summary>串行化落盘：自动暂存、手动暂存、离开时刷盘共用，避免并发写同一 xlsx。</summary>
+    private async Task SaveCoreAsync()
+    {
+        if (_batch is null || IsReadOnly) return;
+        await _saveLock.WaitAsync();
+        try
+        {
+            await _store.SaveBatchAsync(_batch);
+            _dirty = false;
+        }
+        finally { _saveLock.Release(); }
+    }
+
+    public override void Dispose()
+    {
+        _autoSaveDebounce?.Cancel();
+        // 导航/关闭时尽力写回未落盘改动（本地写通常即时完成；经 _saveLock 串行不与进行中的保存打架）。
+        if (_dirty && _batch is not null && !IsReadOnly) _ = SaveCoreAsync();
     }
 }
