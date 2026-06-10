@@ -9,14 +9,24 @@ public sealed class TzhjDbContext : DbContext
     }
 
     public DbSet<AuditRecord> AuditRecords => Set<AuditRecord>();
+    public DbSet<OperationLogEntity> OperationLogs => Set<OperationLogEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // 可以额外添加复合索引优化 Find() 查询
+        // 审计查询优化
         modelBuilder.Entity<AuditRecord>()
             .HasIndex(r => new { r.Flow, r.EmployeeId, r.WindowStart, r.WindowEnd })
             .HasDatabaseName("idx_audit_lookup");
+
+        // 操作日志查询优化
+        modelBuilder.Entity<OperationLogEntity>()
+            .HasIndex(x => x.EmployeeId)
+            .HasDatabaseName("idx_oplog_employee");
+
+        modelBuilder.Entity<OperationLogEntity>()
+            .HasIndex(x => x.OperatedAt)
+            .HasDatabaseName("idx_oplog_time");
     }
 }
