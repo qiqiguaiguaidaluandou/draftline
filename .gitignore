@@ -10,6 +10,10 @@ obj/
 .idea/
 *.DotSettings.user
 
+## Local secrets
+appsettings.local.json
+*.local.json
+
 ## Local sample data (generated)
 /TZHJ_Data/
 TZHJ_Data/

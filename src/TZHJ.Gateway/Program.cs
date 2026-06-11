@@ -7,6 +7,9 @@ using TZHJ.Gateway.Stores;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// 支持本地私密配置覆盖（不提交 git）
+builder.Configuration.AddJsonFile("appsettings.local.json", optional: true, reloadOnChange: true);
+
 // JSON：枚举走字符串（FlowType=Pricing/DrawingSelection），web 默认 camelCase。客户端 HttpJson 用同一套。
 builder.Services.ConfigureHttpJsonOptions(o =>
     o.SerializerOptions.Converters.Add(new JsonStringEnumConverter()));

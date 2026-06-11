@@ -22,6 +22,7 @@ public partial class App : Application
         var config = new ConfigurationBuilder()
             .SetBasePath(AppContext.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: true)
+            .AddJsonFile("appsettings.local.json", optional: true)
             .Build();
 
         // ---------- DI ----------
