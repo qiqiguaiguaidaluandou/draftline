@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,10 @@ public partial class App : Application
         // 真 HTTP 链路：连后端 TZHJ.Gateway（取数/回传/认证/配置/操作日志）。客户端唯一链路。
         var http = new HttpOptions();
         config.GetSection("Http").Bind(http);
+
+        // 强制标准化：数据文件夹固定在"我的文档\TZHJ_Data"，不再受配置文件影响
+        http.LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TZHJ_Data");
+
         services.AddTzhjHttpInfrastructure(http);
 
         // 应用层服务
