@@ -105,8 +105,8 @@ public class LocalBatchStoreTests : IDisposable
 
         await _store.MoveToDoneAsync(batch);
 
-        var todoDir = LocalPaths.BatchDir(_root, FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName);
-        var doneDir = LocalPaths.BatchDir(_root, FlowType.Pricing, Emp, BatchLocation.Done, written.FolderName);
+        var todoDir = LocalPaths.LocalBatchDir(_root, FlowType.Pricing, BatchLocation.Todo, "Default", written.FolderName);
+        var doneDir = LocalPaths.LocalBatchDir(_root, FlowType.Pricing, BatchLocation.Done, "Default", written.FolderName);
         Assert.False(Directory.Exists(todoDir));
         Assert.True(Directory.Exists(doneDir));
 

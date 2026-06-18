@@ -8,21 +8,37 @@ namespace TZHJ.Core.Models;
 /// </summary>
 public static class LocalPaths
 {
-    /// <summary>&lt;根&gt;/&lt;流程&gt;/&lt;工号&gt;</summary>
-    public static string EmployeeRoot(string root, FlowType flow, string employeeId) =>
-        Path.Combine(root, LocalFolders.FlowFolder(flow), employeeId);
+    /// <summary>&lt;根&gt;/&lt;流程&gt;</summary>
+    public static string FlowRoot(string root, FlowType flow) =>
+        Path.Combine(root, LocalFolders.FlowFolder(flow));
 
-    /// <summary>&lt;根&gt;/&lt;流程&gt;/&lt;工号&gt;/{待处理|已处理}</summary>
-    public static string LocationRoot(string root, FlowType flow, string employeeId, BatchLocation location) =>
-        Path.Combine(EmployeeRoot(root, flow, employeeId), LocalFolders.LocationFolder(location));
+    /// <summary>本地电脑专用：&lt;根&gt;/&lt;流程&gt;/&lt;状态(待处理|已处理)&gt;</summary>
+    public static string LocalLocationRoot(string root, FlowType flow, BatchLocation location) =>
+        Path.Combine(FlowRoot(root, flow), LocalFolders.LocationFolder(location));
 
-    /// <summary>&lt;根&gt;/&lt;流程&gt;/&lt;工号&gt;/异常待跟进</summary>
-    public static string ExceptionPoolRoot(string root, FlowType flow, string employeeId) =>
-        Path.Combine(EmployeeRoot(root, flow, employeeId), LocalFolders.ExceptionPool);
+    /// <summary>本地电脑专用：&lt;根&gt;/&lt;流程&gt;/&lt;状态(待处理|已处理)&gt;/&lt;组&gt;</summary>
+    public static string LocalGroupRoot(string root, FlowType flow, BatchLocation location, string groupName) =>
+        flow == FlowType.DrawingSelection 
+            ? LocalLocationRoot(root, flow, location) 
+            : Path.Combine(LocalLocationRoot(root, flow, location), groupName);
 
-    /// <summary>批次目录绝对路径。</summary>
-    public static string BatchDir(string root, FlowType flow, string employeeId, BatchLocation location, string folderName) =>
-        Path.Combine(LocationRoot(root, flow, employeeId, location), folderName);
+    /// <summary>服务器端专用：&lt;根&gt;/&lt;流程&gt;/&lt;组&gt; (扁平化，无状态层级)</summary>
+    public static string ServerGroupRoot(string root, FlowType flow, string groupName) =>
+        flow == FlowType.DrawingSelection
+            ? FlowRoot(root, flow)
+            : Path.Combine(FlowRoot(root, flow), groupName);
+
+    /// <summary>本地批次目录绝对路径。</summary>
+    public static string LocalBatchDir(string root, FlowType flow, BatchLocation location, string groupName, string batchId) =>
+        Path.Combine(LocalGroupRoot(root, flow, location, groupName), batchId);
+
+    /// <summary>服务器批次目录绝对路径。</summary>
+    public static string ServerBatchDir(string root, FlowType flow, string groupName, string batchId) =>
+        Path.Combine(ServerGroupRoot(root, flow, groupName), batchId);
+
+    /// <summary>本地异常池目录。</summary>
+    public static string LocalExceptionPoolRoot(string root, FlowType flow) =>
+        Path.Combine(FlowRoot(root, flow), LocalFolders.ExceptionPool);
 
     /// <summary>把窗口起止格式化为批次目录名。</summary>
     public static string BatchFolderName(DateTime start, DateTime end)

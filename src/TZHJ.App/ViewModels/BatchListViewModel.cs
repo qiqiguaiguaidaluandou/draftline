@@ -48,12 +48,14 @@ public sealed partial class BatchListViewModel : ViewModelBase
         var locName = location == BatchLocation.Todo ? "待处理" : "已处理";
         Title = $"{flowName} · {locName}";
         IsTodo = location == BatchLocation.Todo;
-        LocationRootPath = LocalPaths.LocationRoot(_session.Config.LocalRoot, flow, session.Operator.EmployeeId, location);
+        LocationRootPath = LocalPaths.LocalLocationRoot(_session.Config.LocalRoot, flow, location);
         StartWatching();
     }
 
     public bool IsTodo { get; }
     public string LocationRootPath { get; }
+
+    [ObservableProperty] private bool _showGroupColumn;
 
     public ObservableCollection<BatchRowVM> Batches { get; } = new();
 
@@ -64,6 +66,10 @@ public sealed partial class BatchListViewModel : ViewModelBase
         {
             Batches.Clear();
             var list = await _store.ListBatchesAsync(_flow, _session.Operator.EmployeeId, _location);
+            
+            // 权限感应：如果列表中存在超过一个不同的组名，则显示组列
+            ShowGroupColumn = list.Select(b => b.GroupName).Distinct().Count() > 1;
+
             foreach (var b in list)
                 Batches.Add(new BatchRowVM(b));
         }
@@ -83,26 +89,21 @@ public sealed partial class BatchListViewModel : ViewModelBase
     private void OpenBatch(BatchRowVM row) =>
         _nav.ToBatchWork(_flow, _location, row.Batch.FolderName);
 
-    /// <summary>手动补拉：经 BatchSyncService 补齐"已关闭、本地无、审计未命中"的窗。
-    /// 手动补拉与定时触发标准一致，需窗口关闭满 30 分钟才触发。</summary>
+    /// <summary>手动同步：触发一次镜像同步，补齐服务器上已存在但本地尚未镜像的批次。</summary>
     [RelayCommand]
-    private async Task ManualFetch()
+    private async Task RefreshMirror()
     {
-        if (!IsTodo) return;
         IsBusy = true;
         try
         {
-            var windows = _session.Config.WindowsFor(_flow);
-            var result = await _sync.SyncAsync(_flow, _session.Operator.EmployeeId, windows, DateTime.Now, delayMinutes: 30);
+            // --- New Architecture: Pure Mirror Refresh ---
+            await _sync.MirrorSyncAsync(_session.Operator.EmployeeId);
             await LoadAsync();
-
-            if (result.Fetched > 0) _dialog.Success($"补拉完成，新增 {result.Fetched} 个批次。");
-            else if (result.Failed > 0) _dialog.Error($"补拉部分失败：{result.Failed} 个窗口取数未成功，请重试。");
-            else _dialog.Info("本地已是最新，无需补拉");
+            _dialog.Info("同步数据完成。");
         }
         catch (Exception ex)
         {
-            _dialog.Error(FriendlyError.Describe(ex, "补拉"));
+            _dialog.Error(FriendlyError.Describe(ex, "同步失败"));
         }
         finally { IsBusy = false; }
     }
@@ -119,7 +120,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
             _watcher = new FileSystemWatcher(LocationRootPath)
             {
                 NotifyFilter = NotifyFilters.DirectoryName,
-                IncludeSubdirectories = false,
+                IncludeSubdirectories = true,
             };
             _watcher.Created += OnFolderChanged;
             _watcher.Deleted += OnFolderChanged;
@@ -172,6 +173,7 @@ public sealed class BatchRowVM
 
     public Batch Batch { get; }
 
+    public string GroupName => Batch.GroupName;
     public string WindowText => $"{Batch.WindowStart:MM-dd HH:mm} ~ {Batch.WindowEnd:MM-dd HH:mm}";
     public string FolderName => Batch.FolderName;
     public int MaterialCount => Batch.MaterialCount;
@@ -199,4 +201,5 @@ public sealed class BatchRowVM
     public string FetchedText => Batch.FetchedAt.ToString("MM-dd HH:mm");
     public string SubmittedText => Batch.SubmittedAt?.ToString("MM-dd HH:mm") ?? "—";
     public bool IsTodo => Batch.Location == BatchLocation.Todo;
+    public bool IsPricingFlow => Batch.Flow == FlowType.Pricing;
 }

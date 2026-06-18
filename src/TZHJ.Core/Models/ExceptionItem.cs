@@ -20,6 +20,9 @@ public sealed class ExceptionItem
     /// <summary>来源批次目录名。</summary>
     public required string SourceBatch { get; init; }
 
+    /// <summary>所属产品线组。</summary>
+    public string GroupName { get; init; } = "Default";
+
     public required string Reason { get; init; }
 
     public DateTime SuspendedAt { get; init; }

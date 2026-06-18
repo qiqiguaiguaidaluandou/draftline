@@ -26,6 +26,9 @@ public sealed class FetchRequest
     public required FlowType Flow { get; init; }
     public required DateTime WindowStart { get; init; }
     public required DateTime WindowEnd { get; init; }
+
+    /// <summary>目标产品线组（可选）。如果源头已分批，由请求方指定。</summary>
+    public string? GroupName { get; set; }
 }
 
 /// <summary>取数返回的一行：行标识 + 只读字段值（EBS+PLM）+ 该行图纸（含字节内容）。</summary>
@@ -53,6 +56,8 @@ public sealed class FetchResult
     public required string EmployeeId { get; init; }
     public required DateTime WindowStart { get; init; }
     public required DateTime WindowEnd { get; init; }
+    /// <summary>归属组名。</summary>
+    public string? GroupName { get; set; }
     public List<FetchedRow> Rows { get; init; } = new();
     public string? Message { get; init; }
 }
@@ -71,6 +76,8 @@ public sealed class SubmitRequest
 {
     public required string EmployeeId { get; init; }
     public required FlowType Flow { get; init; }
+    /// <summary>归属产品线组。</summary>
+    public required string GroupName { get; init; }
     /// <summary>批次键（流程+窗口起止），幂等/审计用。</summary>
     public required string BatchKey { get; init; }
     public required DateTime WindowStart { get; init; }

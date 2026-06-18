@@ -1,6 +1,7 @@
 using TZHJ.Core.Contracts;
 using TZHJ.Core.Enums;
 using TZHJ.Core.Models;
+using TZHJ.Infrastructure.Storage;
 
 namespace TZHJ.Infrastructure.Sync;
 
@@ -23,49 +24,115 @@ public sealed class BatchSyncService
     }
 
     /// <summary>
-    /// 补齐该流程下"已关闭、本地无、审计未命中"的窗。<paramref name="now"/> 由调用方注入（一般 DateTime.Now）。
-    /// <paramref name="delayMinutes"/> 表示窗口关闭后需等待多少分钟才触发（默认 1 分钟）。
+    /// 全量镜像同步：
+    /// 1. 拉取服务器 Catalog，补齐本地缺失文件或更新已变动文件。
+    /// 2. 状态联动：如果服务器状态与本地位置不一致（如云端变 Done），则移动本地目录。
+    /// 3. 异常池联动：全量覆盖本地异常池。
     /// </summary>
-    public async Task<BatchSyncResult> SyncAsync(
-        FlowType flow, string employeeId, IReadOnlyList<CollectionWindow> windows, DateTime now, int delayMinutes = 1, CancellationToken ct = default)
+    public async Task<BatchSyncResult> MirrorSyncAsync(string employeeId, CancellationToken ct = default)
     {
         var result = new BatchSyncResult();
+        var localRoot = _store.Root;
 
-        foreach (var (start, end) in ClosedWindows(windows, now, delayMinutes))
+        // 1. 同步批次
+        var catalog = await _data.GetCatalogAsync(ct);
+        foreach (var item in catalog)
         {
             ct.ThrowIfCancellationRequested();
 
-            if (_store.BatchExists(flow, employeeId, start, end))
-            {
-                result.SkippedLocal++;
-                continue;
-            }
-
             try
             {
-                var audit = await _audit.ExistsAsync(flow, start, end, ct);
-                if (audit.Exists)
+                // 确定同步范围：Todo 全量，Done 15天
+                LocalPaths.TryParseFolderName(item.BatchId, out var windowStart, out var windowEnd);
+                bool isRecentDone = item.Status == BatchLocation.Done && windowEnd > DateTime.Now.AddDays(-15);
+                bool shouldSync = item.Status == BatchLocation.Todo || isRecentDone;
+
+                if (!shouldSync) continue;
+
+                // 【状态感知】检查本地是否存在于“错误”的位置
+                var otherLocation = item.Status == BatchLocation.Todo ? BatchLocation.Done : BatchLocation.Todo;
+                var wrongDir = LocalPaths.LocalBatchDir(localRoot, item.Flow, otherLocation, item.GroupName, item.BatchId);
+                var targetDir = LocalPaths.LocalBatchDir(localRoot, item.Flow, item.Status, item.GroupName, item.BatchId);
+
+                if (Directory.Exists(wrongDir))
                 {
-                    result.SkippedAudit++; // 已回传过 → 不重拉（D6）
-                    continue;
+                    // 本地位置不对（例如云端已完成，但本地还在待处理），执行移动
+                    Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+                    if (Directory.Exists(targetDir)) Directory.Delete(targetDir, true);
+                    Directory.Move(wrongDir, targetDir);
                 }
 
-                var fetched = await _data.FetchBatchAsync(
-                    new FetchRequest { EmployeeId = employeeId, Flow = flow, WindowStart = start, WindowEnd = end }, ct);
+                // 强制确保物理层级存在（ data/流程/状态/组/批次 ）
+                Directory.CreateDirectory(targetDir);
+                
+                // --- 优化：预先写入包含 TotalRows 的占位 Manifest ---
+                var manifestPath = Path.Combine(targetDir, LocalFolders.Manifest);
+                var manifest = await BatchManifest.LoadAsync(manifestPath, ct) ?? new BatchManifest
+                {
+                    Flow = item.Flow,
+                    EmployeeId = "(group)",
+                    WindowStart = windowStart,
+                    WindowEnd = windowEnd,
+                    FetchedAt = DateTime.Now,
+                };
+                manifest.TotalRows = item.TotalRows; // 同步云端统计
+                await BatchManifest.SaveAsync(manifestPath, manifest, ct);
 
-                if (fetched.Success)
-                    result.NewBatches.Add(await _store.WriteFetchedBatchAsync(fetched, ct));
-                else
-                    result.Failed++;
-            }
-            catch (OperationCanceledException)
-            {
-                throw;
+                await _store.EnsureBatchFolderAsync(item.Flow, item.GroupName, item.BatchId, item.Status, ct);
+
+                // 同步文件
+                foreach (var remoteFile in item.Files)
+                {
+                    var fullLocalPath = Path.Combine(targetDir, remoteFile.FileName);
+                    
+                    bool needsDownload = !File.Exists(fullLocalPath) 
+                                         || new FileInfo(fullLocalPath).Length != remoteFile.Size
+                                         || File.GetLastWriteTime(fullLocalPath) < remoteFile.LastModified.AddSeconds(-1);
+
+                    if (needsDownload)
+                    {
+                        var bytes = await _data.DownloadFileAsync(item.Flow, item.GroupName, item.BatchId, remoteFile.FileName, ct);
+                        await _store.WriteSyncFileAsync(item.Flow, item.GroupName, item.BatchId, item.Status, remoteFile.FileName, bytes, ct);
+                    }
+                }
+                
+                result.NewBatches.Add(new Batch 
+                { 
+                    FolderName = item.BatchId, 
+                    Flow = item.Flow,
+                    EmployeeId = employeeId,
+                    GroupName = item.GroupName,
+                    WindowStart = windowStart,
+                    WindowEnd = windowEnd,
+                    Location = item.Status,
+                    FolderPath = targetDir
+                });
             }
             catch
             {
-                result.Failed++; // 单窗失败隔离：不影响其他窗
+                result.Failed++;
             }
+        }
+
+        // 2. 同步异常池 (按流程归类镜像)
+        var allExceptions = await _data.GetExceptionsAsync(ct);
+        
+        // 分组处理：确保核价的异常去核价文件夹，挑图的异常去挑图文件夹
+        var groups = allExceptions.GroupBy(e => e.Flow);
+        
+        // 覆盖已授权流程的本地记录
+        var processedFlows = new HashSet<FlowType>();
+        foreach (var group in groups)
+        {
+            await _store.OverwriteExceptionsAsync(group.Key, "AllGroups", group.ToList(), ct);
+            processedFlows.Add(group.Key);
+        }
+
+        // 如果某个流程云端已无异常，也需要清空本地
+        var allFlows = new[] { FlowType.Pricing, FlowType.DrawingSelection };
+        foreach (var flow in allFlows.Where(f => !processedFlows.Contains(f)))
+        {
+            await _store.OverwriteExceptionsAsync(flow, "AllGroups", new List<ExceptionItem>(), ct);
         }
 
         return result;

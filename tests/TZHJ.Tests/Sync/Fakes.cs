@@ -40,11 +40,18 @@ internal sealed class FakeLocalBatchStore : ILocalBatchStore
     public Task AddExceptionsAsync(FlowType flow, string employeeId, IEnumerable<ExceptionItem> items, CancellationToken ct = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<ExceptionItem>> ListExceptionsAsync(FlowType flow, string employeeId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task RemoveExceptionAsync(FlowType flow, string employeeId, string sourceBatch, string rowKey, CancellationToken ct = default) => throw new NotSupportedException();
+
+    public string Root => "(fake-root)";
+
+    public Task EnsureBatchFolderAsync(FlowType flow, string groupName, string batchId, BatchLocation location, CancellationToken ct = default) => Task.CompletedTask;
+    public Task WriteSyncFileAsync(FlowType flow, string groupName, string batchId, BatchLocation location, string fileName, byte[] content, CancellationToken ct = default) => Task.CompletedTask;
+    public Task OverwriteExceptionsAsync(FlowType flow, string groupName, IEnumerable<ExceptionItem> items, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 internal sealed class FakeDataGateway : IDataGateway
 {
     public List<FetchRequest> Requests { get; } = new();
+    public List<BatchCatalogItem> Catalog { get; } = new();
     /// <summary>自定义每个请求的应答；返回 null 表示默认成功空批。抛异常表示取数失败。</summary>
     public Func<FetchRequest, FetchResult>? Responder { get; set; }
 
@@ -61,6 +68,13 @@ internal sealed class FakeDataGateway : IDataGateway
         };
         return Task.FromResult(r);
     }
+
+    public Task<List<BatchCatalogItem>> GetCatalogAsync(CancellationToken ct = default) => Task.FromResult(Catalog);
+    public Task<byte[]> DownloadFileAsync(FlowType flow, string groupName, string batchId, string fileName, CancellationToken ct = default) => Task.FromResult(Array.Empty<byte>());
+    public Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default) => Task.CompletedTask;
+    public Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default) => Task.FromResult(new List<ExceptionItem>());
+    public Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 internal sealed class FakeAuditGateway : IAuditGateway

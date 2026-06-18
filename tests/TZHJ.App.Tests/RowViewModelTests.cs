@@ -18,7 +18,7 @@ public class RowViewModelTests
             row,
             requiredKeys: new[] { "targetPrice" },
             editableKeys: new[] { "targetPrice" },
-            onChanged: () => { },
+            onChanged: _ => { },
             readOnly: readOnly);
     }
 

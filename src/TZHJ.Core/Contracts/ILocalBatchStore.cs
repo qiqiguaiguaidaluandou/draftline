@@ -10,6 +10,9 @@ namespace TZHJ.Core.Contracts;
 /// </summary>
 public interface ILocalBatchStore
 {
+    /// <summary>本地存储根目录。</summary>
+    string Root { get; }
+
     /// <summary>列出某流程/工号/位置下的所有批次（扫描文件夹 + manifest，不读全部行内容）。</summary>
     Task<IReadOnlyList<Batch>> ListBatchesAsync(FlowType flow, string employeeId, BatchLocation location, CancellationToken ct = default);
 
@@ -36,4 +39,15 @@ public interface ILocalBatchStore
 
     /// <summary>判断某窗口本地是否已有批次（待处理或已处理），供登录补拉判断"漏数"用。</summary>
     bool BatchExists(FlowType flow, string employeeId, DateTime windowStart, DateTime windowEnd);
+
+    // --- Remote-First 镜像同步支持 ---
+
+    /// <summary>确保批次文件夹及其 manifest 存在。</summary>
+    Task EnsureBatchFolderAsync(FlowType flow, string groupName, string batchId, BatchLocation location, CancellationToken ct = default);
+
+    /// <summary>写入同步下来的文件字节。</summary>
+    Task WriteSyncFileAsync(FlowType flow, string groupName, string batchId, BatchLocation location, string fileName, byte[] content, CancellationToken ct = default);
+
+    /// <summary>全量覆盖异常池。</summary>
+    Task OverwriteExceptionsAsync(FlowType flow, string groupName, IEnumerable<ExceptionItem> items, CancellationToken ct = default);
 }

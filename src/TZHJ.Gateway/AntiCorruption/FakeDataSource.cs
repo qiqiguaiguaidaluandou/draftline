@@ -20,7 +20,7 @@ public sealed class FakeDataSource : IEbsPlmSource, ISubmitSink
     private static readonly string[] ProductLines = { "产品线A", "产品线B", "产品线C" };
     private static readonly string[] Departments = { "机加一车间", "机加二车间", "钣金车间" };
     private static readonly string[] Applicants = { "王工", "赵工", "钱工", "孙工" };
-    private static readonly string[] ChangeStates = { "无变更", "无变更", "无变更", "有变更" };
+    private static readonly string[] ChangeStates = { "N", "N", "N", "Y" };
 
     private readonly FakeOptions _options;
 

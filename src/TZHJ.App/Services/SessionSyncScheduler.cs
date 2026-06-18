@@ -1,5 +1,6 @@
 using System.Windows.Threading;
 using TZHJ.App.Services;
+using TZHJ.Core.Enums;
 using TZHJ.Infrastructure.Sync;
 
 namespace TZHJ.App.Services;
@@ -42,30 +43,28 @@ public sealed class SessionSyncScheduler
 
     private async Task RunPassAsync(bool isInitial = false)
     {
-        if (_busy || !_session.IsAuthenticated) return; // 并发护栏：上一轮没跑完就跳过本跳
+        if (_busy || !_session.IsAuthenticated) return; // 并发护栏
         _busy = true;
         try
         {
             var emp = _session.Operator.EmployeeId;
-            var newCount = 0;
-            var delayMinutes = isInitial ? 1 : 30;
 
-            foreach (var flow in _session.Operator.AllowedFlows)
+            // --- New Architecture: Pure Mirror Sync ---
+            // 客户端不再主动计算缺失窗口并触发 /fetch。
+            // 它的职责仅限于同步服务器上已经存在的批次、状态和异常。
+            var result = await _sync.MirrorSyncAsync(emp);
+
+            if (result.Fetched > 0)
             {
-                try
-                {
-                    var windows = _session.Config.WindowsFor(flow);
-                    var result = await _sync.SyncAsync(flow, emp, windows, DateTime.Now, delayMinutes);
-                    newCount += result.Fetched;
-                }
-                catch
-                {
-                    // 单流程失败不阻断其他流程/后续轮询（自动取数不弹阻断错误）
-                }
+                _dialog.Info($"云端同步：新增 {result.Fetched} 个批次已到达。");
             }
-            if (newCount > 0)
-                _dialog.Info($"已自动取数：新增 {newCount} 个批次。");
+        }
+        catch (Exception ex)
+        {
+            // 镜像同步静默重试，不弹阻断错误，但记录到日志
+            System.Diagnostics.Debug.WriteLine($"Mirror sync failed: {ex.Message}");
         }
         finally { _busy = false; }
     }
+
 }

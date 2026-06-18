@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\TZHJ.Core\TZHJ.Core.csproj" />
     <ProjectReference Include="..\..\src\TZHJ.Infrastructure\TZHJ.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\TZHJ.Gateway\TZHJ.Gateway.csproj" />
   </ItemGroup>
 
 </Project>

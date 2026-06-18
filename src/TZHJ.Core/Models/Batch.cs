@@ -12,6 +12,9 @@ public sealed class Batch
 
     public required string EmployeeId { get; init; }
 
+    /// <summary>归属业务组。</summary>
+    public string GroupName { get; set; } = "Default";
+
     /// <summary>采集窗口起（含）。</summary>
     public required DateTime WindowStart { get; init; }
 
@@ -36,10 +39,13 @@ public sealed class Batch
     /// <summary>回传时间（已处理批次）。</summary>
     public DateTime? SubmittedAt { get; set; }
 
-    /// <summary>批次键 = 流程 + 窗口起止，唯一。</summary>
-    public string Key => $"{Flow}|{WindowStart:yyyyMMddHHmm}-{WindowEnd:yyyyMMddHHmm}";
+    /// <summary>批次键：在远程同步模式下，直接对应服务器端的 BatchId（即文件夹名）。</summary>
+    public string Key => FolderName;
 
-    public int MaterialCount => Rows.Count;
+    /// <summary>从元数据（manifest/catalog）中获取的总行数，用于性能优化。</summary>
+    public int? TotalRowsFromMeta { get; set; }
+
+    public int MaterialCount => TotalRowsFromMeta ?? Rows.Count;
     public int DoneCount => Rows.Count(r => r.Status is RowStatus.Done or RowStatus.Uploaded);
     public int ExceptionCount => Rows.Count(r => r.Status == RowStatus.Exception);
     public int PendingCount => Rows.Count(r => r.Status == RowStatus.Pending);

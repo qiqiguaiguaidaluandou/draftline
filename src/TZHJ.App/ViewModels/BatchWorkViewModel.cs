@@ -17,6 +17,7 @@ namespace TZHJ.App.ViewModels;
 public sealed partial class BatchWorkViewModel : ViewModelBase
 {
     private readonly ILocalBatchStore _store;
+    private readonly IDataGateway _data;
     private readonly ISubmitGateway _submit;
     private readonly IFieldProvider _fieldProvider;
     private readonly ISession _session;
@@ -31,12 +32,13 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     private Batch? _batch;
 
     public BatchWorkViewModel(
-        ILocalBatchStore store, ISubmitGateway submit, IFieldProvider fieldProvider,
+        ILocalBatchStore store, IDataGateway data, ISubmitGateway submit, IFieldProvider fieldProvider,
         ISession session, INavigationService nav, IDialogService dialog, IExplorerService explorer,
         IOperationLogGateway opLog,
         FlowType flow, BatchLocation location, string folderName)
     {
         _store = store;
+        _data = data;
         _submit = submit;
         _fieldProvider = fieldProvider;
         _session = session;
@@ -91,7 +93,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
                 return;
             }
 
-            Title = $"批次作业 · {_batch.WindowStart:MM-dd HH:mm} ~ {_batch.WindowEnd:MM-dd HH:mm}";
+            Title = $"批次作业 · {_batch.GroupName} · {_batch.WindowStart:MM-dd HH:mm} ~ {_batch.WindowEnd:MM-dd HH:mm}";
             FolderPathText = _batch.FolderPath;
 
             var requiredKeys = Fields.Where(f => f.IsEditable && f.IsRequired).Select(f => f.Key).ToHashSet();
@@ -120,31 +122,57 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void MarkException(RowViewModel row)
+    private async Task MarkException(RowViewModel row)
     {
         // 不预填默认原因，由操作员自己写（沿用"原因为空则不挂起"）。
         var reason = _dialog.Prompt("挂起异常", "请填写异常原因：",
             row.ExceptionReason is { Length: > 0 } ? row.ExceptionReason : null);
         if (string.IsNullOrWhiteSpace(reason)) return;
-        row.Suspend(reason);
-        Recompute();
-        ScheduleAutoSave();
+
+        IsBusy = true;
+        try
+        {
+            // --- Remote-First: 同步到云端异常池 ---
+            await _data.SuspendExceptionAsync(new SuspendExceptionRequest
+            {
+                Flow = _flow,
+                GroupName = _batch?.GroupName ?? "Default",
+                BatchId = _batch?.FolderName ?? "",
+                RowKey = row.RowKey,
+                MaterialCode = row.Model.Get("materialCode") ?? row.RowKey,
+                DisplayName = row.Model.Get("name") ?? row.Model.Get("materialDesc"),
+                Reason = reason
+            });
+
+            row.Suspend(reason);
+            Recompute();
+            await SaveCoreAsync(); // 更新本地镜像
+        }
+        catch (Exception ex)
+        {
+            _dialog.Error(FriendlyError.Describe(ex, "挂起异常"));
+        }
+        finally { IsBusy = false; }
     }
 
     [RelayCommand]
-    private void Restore(RowViewModel row)
+    private async Task Restore(RowViewModel row)
     {
-        row.Restore();
-        Recompute();
-        ScheduleAutoSave();
-    }
+        IsBusy = true;
+        try
+        {
+            // --- Remote-First: 从云端异常池移除 ---
+            await _data.ResolveExceptionAsync(_batch?.GroupName ?? "Default", _batch?.FolderName ?? "", row.RowKey);
 
-    [RelayCommand]
-    private async Task Save()
-    {
-        if (_batch is null || IsReadOnly) return;
-        await SaveCoreAsync();
-        _dialog.Success("已写回本批次表格（暂存）。");
+            row.Restore();
+            Recompute();
+            await SaveCoreAsync(); // 更新本地镜像
+        }
+        catch (Exception ex)
+        {
+            _dialog.Error(FriendlyError.Describe(ex, "撤销异常"));
+        }
+        finally { IsBusy = false; }
     }
 
     [RelayCommand(CanExecute = nameof(CanSubmit))]
@@ -176,6 +204,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
             {
                 EmployeeId = _session.Operator.EmployeeId,
                 Flow = _flow,
+                GroupName = _batch.GroupName,
                 BatchKey = _batch.Key,
                 WindowStart = _batch.WindowStart,
                 WindowEnd = _batch.WindowEnd,
@@ -246,7 +275,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     private bool _dirty;
 
     /// <summary>行值改动（编辑待填列）：重算闸门 + 防抖自动暂存。</summary>
-    private void OnRowChanged()
+    private void OnRowChanged(RowViewModel row)
     {
         Recompute();
         ScheduleAutoSave();
@@ -275,12 +304,12 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         try
         {
             await SaveCoreAsync();
-            AutoSaveHint = $"已自动暂存 · {DateTime.Now:HH:mm:ss}";
+            AutoSaveHint = $"已同步服务器 · {DateTime.Now:HH:mm:ss}";
         }
         catch
         {
             // 自动暂存失败不打断填写，只提示；操作员仍可点「暂存」或离开时再尝试。
-            AutoSaveHint = "自动暂存失败，请手动点「暂存」";
+            AutoSaveHint = "云端同步失败，请检查网络";
         }
     }
 
@@ -298,6 +327,22 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         await _saveLock.WaitAsync();
         try
         {
+            // --- Remote-First: 找出所有脏行并同步到服务器 ---
+            var dirtyRows = Rows.Where(r => r.IsDirty).ToList();
+            foreach (var row in dirtyRows)
+            {
+                await _data.UpdateRowAsync(new UpdateRowRequest
+                {
+                    Flow = _flow,
+                    GroupName = _batch.GroupName,
+                    BatchId = _batch.FolderName,
+                    RowKey = row.RowKey,
+                    Values = new Dictionary<string, string?>(row.Model.Values)
+                });
+                row.IsDirty = false;
+            }
+
+            // 同步成功后，再更新本地镜像
             await _store.SaveBatchAsync(_batch);
             _dirty = false;
         }

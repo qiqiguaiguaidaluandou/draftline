@@ -8,8 +8,8 @@ namespace TZHJ.Core.Models;
 /// </summary>
 public static class LocalFolders
 {
-    public const string Pricing = "核价";
-    public const string DrawingSelection = "挑图";
+    public const string Pricing = "图纸核价";
+    public const string DrawingSelection = "机加中心挑图";
 
     public const string Todo = "待处理";
     public const string Done = "已处理";

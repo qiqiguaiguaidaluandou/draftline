@@ -25,6 +25,8 @@ public sealed class FetchResponse
     public required string EmployeeId { get; init; }
     public required DateTime WindowStart { get; init; }
     public required DateTime WindowEnd { get; init; }
+    /// <summary>归属组名（多组拆分时使用）。</summary>
+    public string? GroupName { get; set; }
     public List<FetchRowDto> Rows { get; init; } = new();
     public string? Message { get; init; }
 }

@@ -47,13 +47,6 @@
             <TextBlock Text="{Binding SubmitButtonText}" Margin="6,0,0,0" Foreground="White" VerticalAlignment="Center" />
           </StackPanel>
         </Button>
-        <Button DockPanel.Dock="Right" Command="{Binding SaveCommand}"
-                Visibility="{Binding IsReadOnly, Converter={StaticResource BoolToVis}, ConverterParameter=Invert}">
-          <StackPanel Orientation="Horizontal">
-            <fi:SymbolIcon Symbol="Save" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
-            <TextBlock Text="暂存" Margin="6,0,0,0" VerticalAlignment="Center" />
-          </StackPanel>
-        </Button>
         <!-- 自动暂存提示（填写/挂起后自动落盘，无需手点暂存） -->
         <TextBlock DockPanel.Dock="Right" Text="{Binding AutoSaveHint}" Foreground="{StaticResource TextMuted}"
                    FontSize="12" VerticalAlignment="Center" Margin="0,0,12,0" />

@@ -26,11 +26,11 @@
           <TextBlock Text="打开文件夹" Margin="6,0,0,0" VerticalAlignment="Center" />
         </StackPanel>
       </Button>
-      <Button DockPanel.Dock="Right" Command="{Binding ManualFetchCommand}"
+      <Button DockPanel.Dock="Right" Command="{Binding RefreshMirrorCommand}"
               Visibility="{Binding IsTodo, Converter={StaticResource BoolToVis}}">
         <StackPanel Orientation="Horizontal">
           <fi:SymbolIcon Symbol="ArrowSync" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
-          <TextBlock Text="手动更新" Margin="6,0,0,0" VerticalAlignment="Center" />
+          <TextBlock Text="同步数据" Margin="6,0,0,0" VerticalAlignment="Center" />
         </StackPanel>
       </Button>
       <Button DockPanel.Dock="Right" Command="{Binding RefreshCommand}">
@@ -47,6 +47,8 @@
       <DataGrid b:CornerClip.Radius="10" BorderThickness="0" ItemsSource="{Binding Batches}" IsReadOnly="True">
       <DataGrid.Columns>
         <!-- 全部列固定宽度：每列按内容给足，谁都不会被挤压；总宽超出窗口时由 DataGrid 出横向滚动条。不用弹性 * -->
+        <DataGridTextColumn Header="产品线组" Binding="{Binding GroupName}" Width="100" 
+                            Visibility="{Binding DataContext.ShowGroupColumn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
         <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="240" />
         <!-- 文件夹名做成可点链接：点它=点"打开表单"，进入表单作业界面 -->
         <DataGridTemplateColumn Header="本地文件夹" Width="250">

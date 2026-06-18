@@ -1,0 +1,35 @@
+using System.ComponentModel.DataAnnotations;
+using TZHJ.Core.Enums;
+
+namespace TZHJ.Gateway.Stores;
+
+/// <summary>
+/// 统一活动日志：整合业务审计、用户行为和系统任务。
+/// </summary>
+public sealed class ActivityLog
+{
+    [Key]
+    public long Id { get; set; }
+
+    public DateTime Timestamp { get; set; } = DateTime.UtcNow;
+
+    [Required]
+    public string EmployeeId { get; set; } = "";
+
+    [Required]
+    public string Action { get; set; } = ""; // Login, Submit, UpdateRow, Suspend, Resolve, Ingest, Cleanup
+
+    public FlowType? Flow { get; set; }
+
+    public string? GroupName { get; set; }
+
+    public string? BatchId { get; set; }
+
+    public int ImpactCount { get; set; } // 受影响行数
+
+    public string Status { get; set; } = "Success"; // Success, Failed
+
+    public string? Payload { get; set; } // JSON 格式的具体信息
+
+    public string? ClientIp { get; set; }
+}

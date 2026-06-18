@@ -34,8 +34,8 @@ public partial class App : Application
         var http = new HttpOptions();
         config.GetSection("Http").Bind(http);
 
-        // 强制标准化：数据文件夹固定在"我的文档\TZHJ_Data"，不再受配置文件影响
-        http.LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TZHJ_Data");
+        // 强制标准化：数据文件夹固定在"我的文档\data"，不再受配置文件影响
+        http.LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
 
         services.AddTzhjHttpInfrastructure(http);
 

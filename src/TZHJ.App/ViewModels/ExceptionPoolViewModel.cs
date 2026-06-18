@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using TZHJ.App.Services;
 using TZHJ.Core.Contracts;
@@ -28,10 +29,13 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
         _flow = flow;
 
         Title = $"{(flow == FlowType.Pricing ? "图纸核价" : "挑图纸")} · 异常待跟进";
-        PoolPath = LocalPaths.ExceptionPoolRoot(session.Config.LocalRoot, flow, session.Operator.EmployeeId);
+        PoolPath = LocalPaths.LocalExceptionPoolRoot(session.Config.LocalRoot, flow);
     }
 
     public string PoolPath { get; }
+
+    [ObservableProperty] private bool _showGroupColumn;
+
     public ObservableCollection<ExceptionItem> Items { get; } = new();
 
     public override async Task LoadAsync()
@@ -40,7 +44,12 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
         try
         {
             Items.Clear();
-            foreach (var item in await _store.ListExceptionsAsync(_flow, _session.Operator.EmployeeId))
+            var list = await _store.ListExceptionsAsync(_flow, _session.Operator.EmployeeId);
+            
+            // 权限感应：如果列表中存在超过一个不同的组名，则显示组列
+            ShowGroupColumn = list.Select(e => e.GroupName).Distinct().Count() > 1;
+
+            foreach (var item in list)
                 Items.Add(item);
         }
         finally { IsBusy = false; }

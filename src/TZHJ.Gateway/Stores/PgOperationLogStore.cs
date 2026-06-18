@@ -11,33 +11,35 @@ public sealed class PgOperationLogStore : IOperationLogStore
 
     public void Append(OperationLogEntry entry)
     {
-        var entity = new OperationLogEntity
+        var log = new ActivityLog
         {
+            Timestamp = entry.OperatedAt.ToUniversalTime(),
             EmployeeId = entry.EmployeeId,
-            Operation = entry.Operation,
-            FormName = entry.FormName,
+            Action = "Behavior",
             Flow = entry.Flow,
+            BatchId = entry.FormName, // 借用 BatchId 存页面名
+            Status = "Success",
+            Payload = entry.Operation,
             ClientIp = entry.ClientIp,
-            OperatedAt = entry.OperatedAt.ToUniversalTime(),
         };
 
-        _db.OperationLogs.Add(entity);
+        _db.ActivityLogs.Add(log);
         _db.SaveChanges();
     }
 
     public IReadOnlyList<OperationLogEntry> ListByEmployee(string employeeId)
     {
-        return _db.OperationLogs
-            .Where(x => x.EmployeeId == employeeId)
-            .OrderByDescending(x => x.OperatedAt)
+        return _db.ActivityLogs
+            .Where(x => x.EmployeeId == employeeId && x.Action == "Behavior")
+            .OrderByDescending(x => x.Timestamp)
             .Select(x => new OperationLogEntry
             {
                 EmployeeId = x.EmployeeId,
-                Operation = x.Operation,
-                FormName = x.FormName,
-                Flow = x.Flow,
+                Operation = x.Payload ?? "",
+                FormName = x.BatchId ?? "",
+                Flow = x.Flow ?? TZHJ.Core.Enums.FlowType.Pricing,
                 ClientIp = x.ClientIp,
-                OperatedAt = DateTime.SpecifyKind(x.OperatedAt, DateTimeKind.Utc).ToLocalTime(),
+                OperatedAt = DateTime.SpecifyKind(x.Timestamp, DateTimeKind.Utc).ToLocalTime(),
             })
             .ToList();
     }

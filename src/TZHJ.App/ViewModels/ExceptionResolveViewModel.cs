@@ -17,6 +17,7 @@ namespace TZHJ.App.ViewModels;
 public sealed partial class ExceptionResolveViewModel : ViewModelBase
 {
     private readonly ILocalBatchStore _store;
+    private readonly IDataGateway _data;
     private readonly ISubmitGateway _submit;
     private readonly IFieldProvider _fieldProvider;
     private readonly ISession _session;
@@ -30,12 +31,13 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
     private Batch? _sourceBatch;
 
     public ExceptionResolveViewModel(
-        ILocalBatchStore store, ISubmitGateway submit, IFieldProvider fieldProvider,
+        ILocalBatchStore store, IDataGateway data, ISubmitGateway submit, IFieldProvider fieldProvider,
         ISession session, INavigationService nav, IDialogService dialog, IExplorerService explorer,
         IOperationLogGateway opLog,
         FlowType flow, ExceptionItem exception)
     {
         _store = store;
+        _data = data;
         _submit = submit;
         _fieldProvider = fieldProvider;
         _session = session;
@@ -101,7 +103,7 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
 
             var requiredKeys = Fields.Where(f => f.IsEditable && f.IsRequired).Select(f => f.Key).ToHashSet();
             var editableKeys = Fields.Where(f => f.IsEditable).Select(f => f.Key).ToHashSet();
-            Row = new RowViewModel(model, requiredKeys, editableKeys, Refresh, readOnly: false);
+            Row = new RowViewModel(model, requiredKeys, editableKeys, _ => Refresh(), readOnly: false);
 
             // 解除挂起：清异常态回到待处理（若待填列已填则自动回到已处理），以便编辑后正常判定可上传。
             Row.Restore();
@@ -149,11 +151,14 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
         IsBusy = true;
         try
         {
+            var groupName = _sourceBatch.GroupName;
+
             // 单行复用整批回传形状：BatchKey/窗口取自来源批次，Rows 只放这一行。
             var request = new SubmitRequest
             {
                 EmployeeId = _session.Operator.EmployeeId,
                 Flow = _flow,
+                GroupName = groupName,
                 BatchKey = _sourceBatch.Key,
                 WindowStart = _sourceBatch.WindowStart,
                 WindowEnd = _sourceBatch.WindowEnd,
@@ -169,6 +174,17 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
                 _dialog.Error(result.Message ?? "回传失败，请重试。");
                 return;
             }
+
+            // --- Remote-First: 同步服务器状态 ---
+            await _data.UpdateRowAsync(new UpdateRowRequest
+            {
+                Flow = _flow,
+                GroupName = groupName,
+                BatchId = _exception.SourceBatch,
+                RowKey = Row.RowKey,
+                Values = new Dictionary<string, string?>(Row.Model.Values)
+            });
+            await _data.ResolveExceptionAsync(groupName, _exception.SourceBatch, Row.RowKey);
 
             // 成功：记一条操作日志（fire-and-forget，记录失败不影响回传）。
             OperationLog.Record(_opLog, SubmitButtonText, _exception.SourceBatch, _flow, _session.Operator.EmployeeId);

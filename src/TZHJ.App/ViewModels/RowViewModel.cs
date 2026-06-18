@@ -14,14 +14,16 @@ public sealed class RowViewModel : ObservableObject
     private readonly MaterialRow _row;
     private readonly IReadOnlyCollection<string> _requiredKeys;
     private readonly IReadOnlyCollection<string> _editableKeys;
-    private readonly Action _onChanged;
+    private readonly Action<RowViewModel> _onChanged;
     private readonly bool _readOnly;
+
+    public bool IsDirty { get; set; }
 
     public RowViewModel(
         MaterialRow row,
         IReadOnlyCollection<string> requiredKeys,
         IReadOnlyCollection<string> editableKeys,
-        Action onChanged,
+        Action<RowViewModel> onChanged,
         bool readOnly)
     {
         _row = row;
@@ -44,8 +46,9 @@ public sealed class RowViewModel : ObservableObject
             _row.Set(key, value);
             if (!_readOnly && _editableKeys.Contains(key))
             {
+                IsDirty = true;
                 Reevaluate();
-                _onChanged();
+                _onChanged(this);
             }
         }
     }

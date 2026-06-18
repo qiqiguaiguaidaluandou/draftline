@@ -1,10 +1,34 @@
+using TZHJ.Core.Contracts.Http;
+using TZHJ.Core.Enums;
+using TZHJ.Core.Models;
+
 namespace TZHJ.Core.Contracts;
 
 /// <summary>
-/// 取数网关：带工号调 EBS 取本人需求，再按物料编码调 PLM 取图纸 + "是否存在变更"，
-/// 组织成一个批次返回。客户端拿到后落本地（见 ILocalBatchStore）。真接口到位前 Mock 造数。
+/// 取数网关。负责与后端 Gateway 通信。
 /// </summary>
 public interface IDataGateway
 {
+    /// <summary>按时间窗取数（原始流程）。</summary>
     Task<FetchResult> FetchBatchAsync(FetchRequest request, CancellationToken ct = default);
+
+    // --- Remote-First 新增 ---
+
+    /// <summary>获取服务器同步清单。</summary>
+    Task<List<BatchCatalogItem>> GetCatalogAsync(CancellationToken ct = default);
+
+    /// <summary>下载服务器上的特定文件字节。</summary>
+    Task<byte[]> DownloadFileAsync(FlowType flow, string groupName, string batchId, string fileName, CancellationToken ct = default);
+
+    /// <summary>更新服务器端的一行数据。</summary>
+    Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default);
+
+    /// <summary>同步挂起异常到服务器。</summary>
+    Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default);
+
+    /// <summary>获取服务器端异常池。</summary>
+    Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default);
+
+    /// <summary>从服务器端处理/撤销异常。</summary>
+    Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default);
 }

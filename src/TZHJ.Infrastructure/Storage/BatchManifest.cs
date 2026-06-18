@@ -17,6 +17,7 @@ public sealed class BatchManifest
     public DateTime FetchedAt { get; set; }
     public DateTime? SubmittedAt { get; set; }
     public string? AuditId { get; set; }
+    public int TotalRows { get; set; } // 新增：物料总行数快照
     public List<ManifestRow> Rows { get; set; } = new();
 
     private static readonly JsonSerializerOptions JsonOpts = new()

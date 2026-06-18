@@ -44,7 +44,7 @@ public class BatchKeyTests
     }
 
     [Fact]
-    public void BatchKey_is_flow_plus_window()
+    public void BatchKey_is_folder_name()
     {
         var batch = new Batch
         {
@@ -52,10 +52,10 @@ public class BatchKeyTests
             EmployeeId = "10086",
             WindowStart = new DateTime(2026, 5, 26, 15, 31, 0),
             WindowEnd = new DateTime(2026, 5, 27, 9, 30, 0),
-            FolderName = "x",
+            FolderName = "20260526_1531-20260527_0930",
             FolderPath = "x",
             Location = BatchLocation.Todo,
         };
-        Assert.Equal("Pricing|202605261531-202605270930", batch.Key);
+        Assert.Equal(batch.FolderName, batch.Key);
     }
 }

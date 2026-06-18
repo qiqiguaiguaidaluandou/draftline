@@ -8,25 +8,41 @@ public sealed class TzhjDbContext : DbContext
     {
     }
 
-    public DbSet<AuditRecord> AuditRecords => Set<AuditRecord>();
-    public DbSet<OperationLogEntity> OperationLogs => Set<OperationLogEntity>();
+    public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
+    public DbSet<BatchRegistry> BatchRegistries => Set<BatchRegistry>();
+    public DbSet<ExceptionEntity> Exceptions => Set<ExceptionEntity>();
+    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
-        // 审计查询优化
-        modelBuilder.Entity<AuditRecord>()
-            .HasIndex(r => new { r.Flow, r.EmployeeId, r.WindowStart, r.WindowEnd })
-            .HasDatabaseName("idx_audit_lookup");
+        // 联合主键：一个批次在（流程+组）维度下唯一
+        modelBuilder.Entity<BatchRegistry>()
+            .HasKey(x => new { x.BatchId, x.Flow, x.GroupName });
 
-        // 操作日志查询优化
-        modelBuilder.Entity<OperationLogEntity>()
+        // 批次注册查询优化
+        modelBuilder.Entity<BatchRegistry>()
+            .HasIndex(x => new { x.Flow, x.GroupName, x.Status })
+            .HasDatabaseName("idx_batch_registry_lookup");
+
+        // 异常池查询优化
+        modelBuilder.Entity<ExceptionEntity>()
+            .HasIndex(x => new { x.Flow, x.GroupName, x.Status })
+            .HasDatabaseName("idx_exception_lookup");
+
+        // 用户权限查询优化
+        modelBuilder.Entity<UserPermission>()
             .HasIndex(x => x.EmployeeId)
-            .HasDatabaseName("idx_oplog_employee");
+            .HasDatabaseName("idx_user_permission_employee");
 
-        modelBuilder.Entity<OperationLogEntity>()
-            .HasIndex(x => x.OperatedAt)
-            .HasDatabaseName("idx_oplog_time");
+        // 统一日志查询优化
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(x => new { x.EmployeeId, x.Timestamp })
+            .HasDatabaseName("idx_activity_log_user_time");
+
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(x => new { x.BatchId, x.Action })
+            .HasDatabaseName("idx_activity_log_batch_action");
     }
 }

@@ -11,6 +11,9 @@ public sealed class MaterialRow
     /// <summary>行标识键的值（核价=物料编码、挑图=EBS-ID）。回传时作关联键。</summary>
     public required string RowKey { get; set; }
 
+    /// <summary>所属业务组（用于 Remote-First 精确定位）。</summary>
+    public string? GroupName { get; set; }
+
     /// <summary>字段值，key = <see cref="FieldDefinition.Key"/>。只读字段由取数填入，待填列由操作员填。</summary>
     public Dictionary<string, string?> Values { get; init; } = new();
 

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using TZHJ.Core.Contracts;
 using TZHJ.Core.Contracts.Http;
 using TZHJ.Core.Enums;
+using TZHJ.Core.Models;
 
 namespace TZHJ.Infrastructure.Gateways.Http;
 
@@ -65,9 +66,47 @@ public sealed class HttpDataGateway : IDataGateway
             EmployeeId = fetch.EmployeeId,
             WindowStart = fetch.WindowStart,
             WindowEnd = fetch.WindowEnd,
+            GroupName = fetch.GroupName,
             Rows = rows,
             Message = fetch.Message,
         };
+    }
+
+    public async Task<List<BatchCatalogItem>> GetCatalogAsync(CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<List<BatchCatalogItem>>("/api/sync/catalog", HttpJson.Options, ct)
+               ?? new();
+    }
+
+    public async Task<byte[]> DownloadFileAsync(FlowType flow, string groupName, string batchId, string fileName, CancellationToken ct = default)
+    {
+        var url = $"/api/sync/download?flow={flow}&groupName={Uri.EscapeDataString(groupName)}&batchId={Uri.EscapeDataString(batchId)}&fileName={Uri.EscapeDataString(fileName)}";
+        return await _http.GetByteArrayAsync(url, ct);
+    }
+
+    public async Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default)
+    {
+        using var resp = await _http.PostAsJsonAsync("/api/batch/update-row", request, HttpJson.Options, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    public async Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default)
+    {
+        using var resp = await _http.PostAsJsonAsync("/api/batch/suspend-exception", request, HttpJson.Options, ct);
+        resp.EnsureSuccessStatusCode();
+    }
+
+    public async Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<List<ExceptionItem>>("/api/sync/exceptions", HttpJson.Options, ct)
+               ?? new();
+    }
+
+    public async Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default)
+    {
+        var url = $"/api/batch/resolve-exception?groupName={Uri.EscapeDataString(groupName)}&batchId={Uri.EscapeDataString(batchId)}&rowKey={Uri.EscapeDataString(rowKey)}";
+        using var resp = await _http.PostAsync(url, null, ct);
+        resp.EnsureSuccessStatusCode();
     }
 
     /// <summary>流式下载单张图纸字节。窗口起止用 FetchResponse 回显值，保证与后端确定性重生同种子。</summary>

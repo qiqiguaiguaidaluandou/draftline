@@ -1,9 +1,11 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using TZHJ.Core.Contracts;
 using TZHJ.Gateway.AntiCorruption;
 using TZHJ.Gateway.Auth;
 using TZHJ.Gateway.Endpoints;
 using TZHJ.Gateway.Stores;
+using TZHJ.Gateway;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -27,19 +29,30 @@ var configOptions = new ConfigStoreOptions();
 builder.Configuration.GetSection("Config").Bind(configOptions);
 builder.Services.AddSingleton(configOptions);
 
+var storageOptions = new ServerStorageOptions();
+builder.Configuration.GetSection("Storage").Bind(storageOptions);
+builder.Services.AddSingleton(storageOptions);
+
 // ---------- 认证/授权（占位） ----------
 builder.Services.AddSingleton<ITokenService, FakeTokenService>();
 builder.Services.AddSingleton<IAuthService, FakeAuthService>();
 
-// ---------- 防腐层接缝（本期 Fake；真接口到位后只换这两个实现 = 路线图 B1/B2） ----------
-builder.Services.AddSingleton<FakeDataSource>();
-builder.Services.AddSingleton<IEbsPlmSource>(sp => sp.GetRequiredService<FakeDataSource>());
-builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
+// ---------- 字段提供者 ----------
+builder.Services.AddSingleton<IFieldProvider, ServerFieldProvider>();
 
-// ---------- 存储（骨架内存；上线落 PostgreSQL） ----------
+// ---------- 存储服务 ----------
+builder.Services.AddSingleton<IServerBatchStore, FileServerBatchStore>();
 builder.Services.AddSingleton<IConfigStore, InMemoryConfigStore>();
 builder.Services.AddScoped<IAuditStore, PgAuditStore>();
 builder.Services.AddScoped<IOperationLogStore, PgOperationLogStore>();
+
+// ---------- 后台采集服务 (模拟主动获取) ----------
+builder.Services.AddHostedService<DataIngestionService>();
+
+// ---------- 防腐层接缝 ----------
+builder.Services.AddSingleton<FakeDataSource>();
+builder.Services.AddSingleton<IEbsPlmSource>(sp => sp.GetRequiredService<FakeDataSource>());
+builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
 
 var app = builder.Build();
 

@@ -10,7 +10,7 @@ public sealed class InMemoryAuditStore : IAuditStore
 
     public string Record(FlowType flow, string employeeId, string batchKey, DateTime windowStart, DateTime windowEnd, string target, int rowCount)
     {
-        var auditId = $"AUDIT-{DateTime.Now:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..36];
+        var auditId = $"AUDIT-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..36];
         _records.Add(new AuditRecord
         {
             AuditId = auditId,
@@ -21,7 +21,7 @@ public sealed class InMemoryAuditStore : IAuditStore
             WindowEnd = windowEnd,
             Target = target,
             RowCount = rowCount,
-            SubmittedAt = DateTime.Now,
+            SubmittedAt = DateTime.UtcNow,
         });
         return auditId;
     }
