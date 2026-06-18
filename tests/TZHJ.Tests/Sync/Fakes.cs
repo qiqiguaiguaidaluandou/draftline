@@ -74,7 +74,7 @@ internal sealed class FakeDataGateway : IDataGateway
     public Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default) => Task.CompletedTask;
     public Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default) => Task.CompletedTask;
     public Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default) => Task.FromResult(new List<ExceptionItem>());
-    public Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, CancellationToken ct = default) => Task.CompletedTask;
 }
 
 internal sealed class FakeAuditGateway : IAuditGateway

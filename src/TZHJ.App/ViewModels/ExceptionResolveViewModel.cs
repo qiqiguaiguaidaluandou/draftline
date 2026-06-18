@@ -184,7 +184,7 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
                 RowKey = Row.RowKey,
                 Values = new Dictionary<string, string?>(Row.Model.Values)
             });
-            await _data.ResolveExceptionAsync(groupName, _exception.SourceBatch, Row.RowKey);
+            await _data.ResolveExceptionAsync(_flow, groupName, _exception.SourceBatch, Row.RowKey);
 
             // 成功：记一条操作日志（fire-and-forget，记录失败不影响回传）。
             OperationLog.Record(_opLog, SubmitButtonText, _exception.SourceBatch, _flow, _session.Operator.EmployeeId);

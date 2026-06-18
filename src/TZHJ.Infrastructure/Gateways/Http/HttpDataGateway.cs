@@ -102,9 +102,9 @@ public sealed class HttpDataGateway : IDataGateway
                ?? new();
     }
 
-    public async Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default)
+    public async Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, CancellationToken ct = default)
     {
-        var url = $"/api/batch/resolve-exception?groupName={Uri.EscapeDataString(groupName)}&batchId={Uri.EscapeDataString(batchId)}&rowKey={Uri.EscapeDataString(rowKey)}";
+        var url = $"/api/batch/resolve-exception?flow={flow}&groupName={Uri.EscapeDataString(groupName)}&batchId={Uri.EscapeDataString(batchId)}&rowKey={Uri.EscapeDataString(rowKey)}";
         using var resp = await _http.PostAsync(url, null, ct);
         resp.EnsureSuccessStatusCode();
     }

@@ -44,5 +44,10 @@ public sealed class TzhjDbContext : DbContext
         modelBuilder.Entity<ActivityLog>()
             .HasIndex(x => new { x.BatchId, x.Action })
             .HasDatabaseName("idx_activity_log_batch_action");
+
+        // 补拉判据：按 (工号, 动作, 窗口起) 精确查回传记录（009）
+        modelBuilder.Entity<ActivityLog>()
+            .HasIndex(x => new { x.EmployeeId, x.Action, x.WindowStart })
+            .HasDatabaseName("idx_activity_log_audit_lookup");
     }
 }

@@ -30,5 +30,5 @@ public interface IDataGateway
     Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default);
 
     /// <summary>从服务器端处理/撤销异常。</summary>
-    Task ResolveExceptionAsync(string groupName, string batchId, string rowKey, CancellationToken ct = default);
+    Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, CancellationToken ct = default);
 }

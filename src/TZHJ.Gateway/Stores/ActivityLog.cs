@@ -32,4 +32,12 @@ public sealed class ActivityLog
     public string? Payload { get; set; } // JSON 格式的具体信息
 
     public string? ClientIp { get; set; }
+
+    // 结构化审计字段（009）：回传相关动作（Action="Submit"）填充，供补拉判据精确查询，
+    // 取代原先在 Payload 里塞文本再字符串反解析的脆弱做法。
+    public DateTime? WindowStart { get; set; }
+
+    public DateTime? WindowEnd { get; set; }
+
+    public string? AuditId { get; set; }
 }

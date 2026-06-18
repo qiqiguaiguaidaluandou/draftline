@@ -162,7 +162,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         try
         {
             // --- Remote-First: 从云端异常池移除 ---
-            await _data.ResolveExceptionAsync(_batch?.GroupName ?? "Default", _batch?.FolderName ?? "", row.RowKey);
+            await _data.ResolveExceptionAsync(_flow, _batch?.GroupName ?? "Default", _batch?.FolderName ?? "", row.RowKey);
 
             row.Restore();
             Recompute();

@@ -23,4 +23,7 @@ public sealed class BatchRegistry
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public DateTime LastModified { get; set; }
+
+    // 提交成功时写入（009）：用于重复提交的幂等回显，避免再次回传外部系统。
+    public string? AuditId { get; set; }
 }

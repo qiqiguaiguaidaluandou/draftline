@@ -19,14 +19,15 @@ public static class ApiEndpoints
         app.MapGet("/healthz", () => Results.Ok("ok"));
 
         // 登录（不需令牌）→ 占位认证签发令牌
-        app.MapPost("/api/auth/login", async (LoginRequest req, IAuthService auth, TzhjDbContext db, HttpContext ctx) =>
+        app.MapPost("/api/auth/login", async (LoginRequest req, IAuthService auth, TzhjDbContext db, IHostEnvironment env, HttpContext ctx) =>
         {
             var result = auth.Login(req.EmployeeId, req.Password);
             if (result.Success)
             {
                 var empId = result.Operator!.EmployeeId;
-                // [Auto-Seed] 演示环境自动补全权限
-                if (!await db.UserPermissions.AnyAsync(p => p.EmployeeId == empId))
+                // [Auto-Seed] 仅开发环境自动补全权限，方便演示；生产环境遵循 doc ⑧ 的 Deny-All 白名单，
+                // 未在 UserPermissions 显式授权的工号登录后取不到任何数据（权限须由 DBA / 后续管理后台维护）。
+                if (env.IsDevelopment() && !await db.UserPermissions.AnyAsync(p => p.EmployeeId == empId))
                 {
                     db.UserPermissions.AddRange(
                         new UserPermission { EmployeeId = empId, Flow = FlowType.Pricing, GroupName = "组1" },
@@ -214,16 +215,19 @@ public static class ApiEndpoints
         });
 
         // 6. 异常处理 (补回传或撤销)
-        api.MapPost("/batch/resolve-exception", async (string groupName, string batchId, string rowKey, HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
+        api.MapPost("/batch/resolve-exception", async (string flow, string groupName, string batchId, string rowKey, HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
         {
+            if (!Enum.TryParse<FlowType>(flow, ignoreCase: true, out var flowType))
+                return Results.BadRequest("Invalid flow.");
+
             var empId = ctx.GetEmployeeId();
-            var hasPerm = await db.UserPermissions.AnyAsync(p => 
-                p.EmployeeId == empId && (p.GroupName == "*" || p.GroupName == groupName), ct);
+            var hasPerm = await db.UserPermissions.AnyAsync(p =>
+                p.EmployeeId == empId && p.Flow == flowType && (p.GroupName == "*" || p.GroupName == groupName), ct);
             if (!hasPerm) return Results.Forbid();
 
-            var entity = await db.Exceptions.FirstOrDefaultAsync(e => e.SourceBatch == batchId && e.RowKey == rowKey && e.GroupName == groupName, ct);
+            var entity = await db.Exceptions.FirstOrDefaultAsync(e => e.Flow == flowType && e.SourceBatch == batchId && e.RowKey == rowKey && e.GroupName == groupName, ct);
             if (entity == null && groupName != "Default")
-                entity = await db.Exceptions.FirstOrDefaultAsync(e => e.SourceBatch == batchId && e.RowKey == rowKey && e.GroupName == "Default", ct);
+                entity = await db.Exceptions.FirstOrDefaultAsync(e => e.Flow == flowType && e.SourceBatch == batchId && e.RowKey == rowKey && e.GroupName == "Default", ct);
 
             if (entity != null)
             {
@@ -250,21 +254,68 @@ public static class ApiEndpoints
             return Results.Ok();
         });
 
-        // 回传：整批正常行 → SRM/EBS
+        // 回传：整批正常行 → SRM/EBS（成功判定 + 幂等 + 失败留痕，见 changes/009）
         api.MapPost("/submit", async ([FromBody] SubmitRequest req, HttpContext ctx, ISubmitSink sink, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            if (sink.ShouldFailBatch()) return Results.Json(new SubmitResult { Success = false, Message = "（Fake）回传失败。" });
+            var target = req.Flow == FlowType.Pricing ? "SRM" : "EBS";
 
             var registry = await db.BatchRegistries.FirstOrDefaultAsync(b => b.BatchId == req.BatchKey && b.Flow == req.Flow && b.GroupName == req.GroupName, ct);
             if (registry == null) return Results.NotFound(new { message = "云端找不到批次记录。" });
 
-            var rowResults = await sink.SubmitAsync(req.Flow, empId, req.Rows, ct);
-            registry.Status = BatchLocation.Done;
-            registry.LastModified = DateTime.UtcNow;
+            // 幂等：已提交过的批次不再回传外部系统，直接回显既有 AuditId（防网络重发 / 重复点提交）。
+            if (registry.Status == BatchLocation.Done)
+            {
+                return Results.Json(new SubmitResult
+                {
+                    Success = true,
+                    AuditId = registry.AuditId,
+                    Message = "该批次此前已提交，未重复回传。",
+                });
+            }
 
-            var target = req.Flow == FlowType.Pricing ? "SRM" : "EBS";
+            // 失败留痕：整批失败或任一行失败都记 Failed 日志、不置 Done，返回各行结果供客户端重试。
+            IReadOnlyList<SubmitRowResult> rowResults;
+            if (sink.ShouldFailBatch())
+            {
+                rowResults = req.Rows.Select(r => new SubmitRowResult { RowKey = r.RowKey, Success = false }).ToList();
+            }
+            else
+            {
+                rowResults = await sink.SubmitAsync(req.Flow, empId, req.Rows, ct);
+            }
+
+            var failedKeys = rowResults.Where(r => !r.Success).Select(r => r.RowKey).ToList();
+            if (failedKeys.Count > 0)
+            {
+                db.ActivityLogs.Add(new ActivityLog
+                {
+                    Action = "Submit",
+                    EmployeeId = empId,
+                    Flow = req.Flow,
+                    GroupName = req.GroupName,
+                    BatchId = req.BatchKey,
+                    ImpactCount = rowResults.Count(r => r.Success),
+                    Status = "Failed",
+                    Payload = $"Target: {target}, FailedRows: {string.Join(",", failedKeys)}",
+                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
+                    Timestamp = DateTime.UtcNow
+                });
+                await db.SaveChangesAsync(ct);
+
+                return Results.Json(new SubmitResult
+                {
+                    Success = false,
+                    RowResults = rowResults.ToList(),
+                    Message = $"回传 {target} 失败 {failedKeys.Count} 行，批次未完成，可重试。",
+                });
+            }
+
+            // 成功：置 Done + 结构化审计（窗口起止 / AuditId 落独立列，供 audit/exists 精确查）。
             var auditId = $"AUDIT-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..36];
+            registry.Status = BatchLocation.Done;
+            registry.AuditId = auditId;
+            registry.LastModified = DateTime.UtcNow;
 
             db.ActivityLogs.Add(new ActivityLog
             {
@@ -275,7 +326,10 @@ public static class ApiEndpoints
                 BatchId = req.BatchKey,
                 ImpactCount = req.Rows.Count,
                 Status = "Success",
-                Payload = $"Target: {target}, AuditId: {auditId}",
+                WindowStart = req.WindowStart.ToUniversalTime(),
+                WindowEnd = req.WindowEnd.ToUniversalTime(),
+                AuditId = auditId,
+                Payload = $"Target: {target}",
                 ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
                 Timestamp = DateTime.UtcNow
             });
@@ -312,90 +366,28 @@ public static class ApiEndpoints
             return Results.Json(new OperationLogListResponse { Items = logs });
         });
 
-        // 登录补拉判据
+        // 登录补拉判据：按结构化窗口列精确查成功回传记录（009，取代 Payload 文本匹配）
         api.MapGet("/audit/exists", async (string flow, string windowStart, string windowEnd, HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
         {
             if (!Enum.TryParse<FlowType>(flow, ignoreCase: true, out var flowType)) return Results.BadRequest();
-            if (!TryParseDt(windowStart, out var ws)) return Results.BadRequest();
+            if (!TryParseDt(windowStart, out var ws) || !TryParseDt(windowEnd, out var we)) return Results.BadRequest();
 
-            var wsStr = ws.ToUniversalTime().ToString("O");
+            var wsUtc = ws.ToUniversalTime();
+            var weUtc = we.ToUniversalTime();
+            var empId = ctx.GetEmployeeId();
+
             var hit = await db.ActivityLogs
-                .Where(r => r.Flow == flowType && r.EmployeeId == ctx.GetEmployeeId() && r.Action == "Submit")
+                .Where(r => r.Flow == flowType && r.EmployeeId == empId && r.Action == "Submit" && r.Status == "Success"
+                            && r.WindowStart == wsUtc && r.WindowEnd == weUtc)
                 .OrderByDescending(r => r.Timestamp)
-                .FirstOrDefaultAsync(r => r.Payload != null && r.Payload.Contains(wsStr), ct);
+                .FirstOrDefaultAsync(ct);
 
-            return Results.Json(new AuditExistsResponse 
-            { 
-                Exists = hit != null, 
-                AuditId = hit?.Payload?.Split("AuditId: ").ElementAtOrDefault(1)?.Split(",").ElementAtOrDefault(0) 
+            return Results.Json(new AuditExistsResponse
+            {
+                Exists = hit != null,
+                AuditId = hit?.AuditId
             });
         });
-    }
-
-    private static async Task SaveGroupBatchAsync(TzhjDbContext db, IServerBatchStore store, FetchResponse fullResp, string groupName, List<SourceRow> groupRows, Dictionary<string, byte[]> allDrawings, CancellationToken ct)
-    {
-        var batchId = LocalPaths.BatchFolderName(fullResp.WindowStart, fullResp.WindowEnd);
-        
-        var groupResp = new FetchResponse
-        {
-            Success = true,
-            Flow = fullResp.Flow,
-            EmployeeId = fullResp.EmployeeId,
-            WindowStart = fullResp.WindowStart,
-            WindowEnd = fullResp.WindowEnd,
-            GroupName = groupName,
-            Rows = groupRows.Select(r => new FetchRowDto
-            {
-                RowKey = r.RowKey,
-                Values = r.Values,
-                Drawings = r.Drawings.Select(d => new DrawingMeta { DrawingId = d.DrawingId, FileName = d.FileName, MaterialCode = d.MaterialCode, Size = d.Content.LongLength }).ToList()
-            }).ToList()
-        };
-
-        var groupDrawingNames = groupRows.SelectMany(r => r.Drawings).Select(d => d.FileName).ToHashSet();
-        var groupDrawings = allDrawings.Where(kv => groupDrawingNames.Contains(kv.Key)).Select(kv => (kv.Key, kv.Value)).ToList();
-
-        await store.SaveBatchAsync(groupResp, groupName, groupDrawings, ct);
-
-        var registry = await db.BatchRegistries.FirstOrDefaultAsync(b => b.BatchId == batchId && b.GroupName == groupName && b.Flow == fullResp.Flow, ct);
-        if (registry == null)
-        {
-            registry = new BatchRegistry
-            {
-                BatchId = batchId,
-                GroupName = groupName,
-                Flow = fullResp.Flow,
-                Status = BatchLocation.Todo,
-                TotalRows = groupRows.Count,
-                CreatedAt = DateTime.UtcNow,
-                LastModified = DateTime.UtcNow
-            };
-            db.BatchRegistries.Add(registry);
-        }
-        else
-        {
-            // 保护：如果已经完成，不要重置回 Todo
-            if (registry.Status != BatchLocation.Done)
-            {
-                registry.Status = BatchLocation.Todo;
-            }
-            registry.TotalRows = groupRows.Count;
-            registry.LastModified = DateTime.UtcNow;
-        }
-
-        db.ActivityLogs.Add(new ActivityLog
-        {
-            Action = "Ingest",
-            EmployeeId = "SYSTEM",
-            Flow = fullResp.Flow,
-            GroupName = groupName,
-            BatchId = batchId,
-            ImpactCount = groupRows.Count,
-            Status = "Success",
-            Timestamp = DateTime.UtcNow
-        });
-
-        await db.SaveChangesAsync(ct);
     }
 
     private static bool TryParseDt(string s, out DateTime dt) =>
