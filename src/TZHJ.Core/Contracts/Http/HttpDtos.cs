@@ -113,6 +113,39 @@ public sealed class UserSummary
     public List<PermissionDto> EffectivePermissions { get; init; } = new();
 }
 
+// ----- 管理端：操作日志 / 可选组 -----
+
+/// <summary>管理端日志一条（全量 ActivityLogs 投影）。</summary>
+public sealed class AdminLogEntry
+{
+    public long Id { get; init; }
+    /// <summary>UTC 时间。</summary>
+    public DateTime Timestamp { get; init; }
+    public required string EmployeeId { get; init; }
+    public required string Action { get; init; }
+    public required string Status { get; init; }
+    public FlowType? Flow { get; init; }
+    public string? GroupName { get; init; }
+    public string? BatchId { get; init; }
+    public int ImpactCount { get; init; }
+    public string? Payload { get; init; }
+    public string? ClientIp { get; init; }
+}
+
+/// <summary>管理端日志查询响应（分页）。</summary>
+public sealed class AdminLogListResponse
+{
+    public int Total { get; init; }
+    public List<AdminLogEntry> Items { get; init; } = new();
+}
+
+/// <summary>可选数据范围（来自现有批次的 流程+组），配角色时选用，避免手打错组名。</summary>
+public sealed class GroupOption
+{
+    public required FlowType Flow { get; init; }
+    public required string GroupName { get; init; }
+}
+
 /// <summary>
 /// 取数响应（第一阶段）：行数据 + 每行图纸的**元数据**（不含字节）。
 /// 客户端拿到后对每张图纸调 GET /api/drawings 流式下载，再拼成 TZHJ.Core 的 FetchResult。

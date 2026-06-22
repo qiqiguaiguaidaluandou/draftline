@@ -1,0 +1,236 @@
+@page "/admin/users"
+@attribute [Authorize(Policy = "AdminOnly")]
+@rendermode InteractiveServer
+@inject IServiceScopeFactory ScopeFactory
+
+<h1>用户管理</h1>
+
+@if (_msg is not null)
+{
+    <div class="msg @(_ok ? "ok" : "err")">@_msg</div>
+}
+
+<div class="card">
+    <h2>新建用户</h2>
+    <div class="row">
+        <div><label>工号</label><input @bind="_newEmpId" /></div>
+        <div><label>姓名</label><input @bind="_newName" /></div>
+        <div><label>部门</label><input @bind="_newDept" /></div>
+        <div><label>岗位</label><input @bind="_newPos" /></div>
+    </div>
+    <div class="row">
+        <div><label>初始密码（≥8位，首登强制改）</label><input @bind="_newPwd" /></div>
+        <div style="flex:0 0 auto; align-self:flex-end;">
+            <label><input type="checkbox" @bind="_newIsAdmin" /> 设为管理员</label>
+        </div>
+        <div style="flex:0 0 auto; align-self:flex-end;">
+            <button disabled="@_busy" @onclick="CreateUser">创建</button>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <h2>用户列表（@_users.Count）</h2>
+    <table>
+        <thead>
+            <tr><th>工号</th><th>姓名</th><th>部门/岗位</th><th>状态</th><th>角色</th><th>操作</th></tr>
+        </thead>
+        <tbody>
+            @foreach (var u in _users)
+            {
+                <tr>
+                    <td>@u.EmployeeId @(u.IsAdmin ? "👑" : "")</td>
+                    <td>@u.DisplayName</td>
+                    <td>@u.Department <span class="muted">@u.Position</span></td>
+                    <td>
+                        @if (!u.IsActive) { <span class="pill off">停用</span> }
+                        else { <span class="pill ok">启用</span> }
+                        @if (u.IsLocked) { <span class="pill warn">锁定</span> }
+                        @if (u.MustChangePassword) { <span class="pill warn">待改密</span> }
+                    </td>
+                    <td>
+                        @if (u.Roles.Count == 0) { <span class="muted">无</span> }
+                        else { @foreach (var r in u.Roles) { <span class="pill tag">@r.Name</span> } }
+                    </td>
+                    <td class="actions">
+                        <button class="ghost" @onclick="() => ToggleRoles(u)">配角色</button>
+                        <button class="ghost" @onclick="() => ToggleReset(u.EmployeeId)">重置密码</button>
+                        @if (u.IsActive)
+                        {
+                            <button class="danger" disabled="@_busy" @onclick="() => SetActive(u.EmployeeId, false)">停用</button>
+                        }
+                        else
+                        {
+                            <button disabled="@_busy" @onclick="() => SetActive(u.EmployeeId, true)">启用</button>
+                        }
+                    </td>
+                </tr>
+                @if (_rolesFor == u.EmployeeId)
+                {
+                    <tr>
+                        <td colspan="6" style="background:#f8fafc;">
+                            <strong>勾选 @u.EmployeeId 的角色：</strong>
+                            <div style="margin:8px 0;">
+                                @if (_roles.Count == 0) { <span class="muted">还没有角色，请先到“角色管理”创建。</span> }
+                                @foreach (var r in _roles)
+                                {
+                                    <label style="display:inline-block; margin-right:16px;">
+                                        <input type="checkbox"
+                                               checked="@_sel.Contains(r.Id)"
+                                               @onchange="e => ToggleSel(r.Id, (bool)e.Value!)" />
+                                        @r.Name
+                                    </label>
+                                }
+                            </div>
+                            <button disabled="@_busy" @onclick="SaveRoles">保存角色</button>
+                            <button class="ghost" @onclick="() => _rolesFor = null">取消</button>
+                        </td>
+                    </tr>
+                }
+                @if (_resetFor == u.EmployeeId)
+                {
+                    <tr>
+                        <td colspan="6" style="background:#f8fafc;">
+                            <strong>重置 @u.EmployeeId 的密码（≥8位，重置后首登强制改）：</strong>
+                            <div class="row" style="margin-top:8px;">
+                                <div style="max-width:260px;"><input @bind="_resetPwd" placeholder="新密码" /></div>
+                                <div style="flex:0 0 auto;">
+                                    <button disabled="@_busy" @onclick="DoReset">确定重置</button>
+                                    <button class="ghost" @onclick="() => _resetFor = null">取消</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<UserSummary> _users = new();
+    private List<RoleSummary> _roles = new();
+    private string _actor = "";
+    private bool _busy;
+    private string? _msg;
+    private bool _ok;
+
+    // 新建用户表单
+    private string _newEmpId = "", _newName = "", _newDept = "", _newPos = "", _newPwd = "";
+    private bool _newIsAdmin;
+
+    // 行内编辑状态
+    private string? _rolesFor;
+    private HashSet<int> _sel = new();
+    private string? _resetFor;
+    private string _resetPwd = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var s = await AuthState;
+            _actor = s.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+        }
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+        _users = await svc.ListUsersAsync();
+        _roles = await svc.ListRolesAsync();
+    }
+
+    private void Show(ApiResult r) { _ok = r.Success; _msg = r.Message; }
+
+    private async Task CreateUser()
+    {
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            var r = await svc.CreateUserAsync(new CreateUserRequest
+            {
+                EmployeeId = _newEmpId,
+                DisplayName = _newName,
+                Department = string.IsNullOrWhiteSpace(_newDept) ? null : _newDept,
+                Position = string.IsNullOrWhiteSpace(_newPos) ? null : _newPos,
+                InitialPassword = _newPwd,
+                IsAdmin = _newIsAdmin,
+            }, _actor, null);
+            Show(r);
+            if (r.Success)
+            {
+                _newEmpId = _newName = _newDept = _newPos = _newPwd = "";
+                _newIsAdmin = false;
+            }
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+
+    private void ToggleRoles(UserSummary u)
+    {
+        _resetFor = null;
+        if (_rolesFor == u.EmployeeId) { _rolesFor = null; return; }
+        _rolesFor = u.EmployeeId;
+        _sel = u.Roles.Select(r => r.Id).ToHashSet();
+    }
+
+    private void ToggleSel(int id, bool on) { if (on) _sel.Add(id); else _sel.Remove(id); }
+
+    private async Task SaveRoles()
+    {
+        if (_rolesFor is null) return;
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            Show(await svc.SetUserRolesAsync(_rolesFor, _sel.ToList(), _actor, null));
+            _rolesFor = null;
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+
+    private void ToggleReset(string empId)
+    {
+        _rolesFor = null;
+        _resetPwd = "";
+        _resetFor = _resetFor == empId ? null : empId;
+    }
+
+    private async Task DoReset()
+    {
+        if (_resetFor is null) return;
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            Show(await svc.ResetPasswordAsync(_resetFor, _resetPwd, _actor, null));
+            _resetFor = null;
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task SetActive(string empId, bool active)
+    {
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            Show(await svc.SetActiveAsync(empId, active, _actor, null));
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+}

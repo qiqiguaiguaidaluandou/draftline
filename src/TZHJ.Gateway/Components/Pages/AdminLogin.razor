@@ -1,0 +1,26 @@
+@page "/admin/login"
+@layout BlankLayout
+
+@* 静态页：纯表单 POST 到 /admin/login（Cookie 登入端点）。无需交互/令牌。 *@
+<div class="login-wrap">
+    <div class="card login-card">
+        <h1 style="text-align:center;">管理后台登录</h1>
+        @if (!string.IsNullOrEmpty(Error))
+        {
+            <div class="msg err">工号或密码错误，或该账号不是管理员。</div>
+        }
+        <form method="post" action="/admin/login">
+            <label>工号</label>
+            <input name="employeeId" autofocus />
+            <label>密码</label>
+            <input name="password" type="password" />
+            <button type="submit" style="width:100%; margin-top:16px;">登 录</button>
+        </form>
+        <p class="muted" style="text-align:center; margin-top:14px;">仅系统管理员可登录</p>
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "error")]
+    public string? Error { get; set; }
+}

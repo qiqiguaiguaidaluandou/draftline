@@ -1,0 +1,60 @@
+@* 管理后台根文档。整套样式内联，无外部依赖。 *@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>图纸核价系统 · 管理后台</title>
+    <base href="/" />
+    <HeadOutlet />
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: "Microsoft YaHei", system-ui, sans-serif; color: #1e2228; background: #f4f6f9; font-size: 14px; }
+        a { color: #2563eb; text-decoration: none; }
+        h1 { font-size: 20px; margin: 0 0 18px; }
+        h2 { font-size: 15px; margin: 0 0 12px; color: #374151; }
+        .layout { display: flex; min-height: 100vh; }
+        .side { width: 200px; background: #1e2228; color: #cbd5e1; display: flex; flex-direction: column; padding: 18px 0; }
+        .side .brand { font-size: 15px; font-weight: 600; color: #fff; padding: 0 20px 18px; }
+        .side a { display: block; color: #cbd5e1; padding: 11px 20px; }
+        .side a:hover { background: #2b313a; color: #fff; }
+        .side a.active { background: #2563eb; color: #fff; }
+        .side .spacer { flex: 1; }
+        .side .who { padding: 12px 20px; font-size: 12px; color: #94a3b8; border-top: 1px solid #2b313a; }
+        .main { flex: 1; padding: 28px 32px; overflow: auto; }
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #eef0f3; font-size: 13px; vertical-align: top; }
+        th { background: #f8fafc; color: #64748b; font-weight: 600; }
+        tr:last-child td { border-bottom: none; }
+        .card { background: #fff; border-radius: 8px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.06); margin-bottom: 20px; }
+        label { display: block; font-size: 12px; color: #64748b; margin: 10px 0 4px; }
+        input, select { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px; }
+        input[type=checkbox] { width: auto; }
+        .row { display: flex; gap: 14px; flex-wrap: wrap; }
+        .row > div { flex: 1; min-width: 140px; }
+        button { background: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+        button:hover { background: #1d4ed8; }
+        button.ghost { background: #eef2f7; color: #374151; }
+        button.ghost:hover { background: #e2e8f0; }
+        button.danger { background: #dc2626; }
+        button.danger:hover { background: #b91c1c; }
+        button:disabled { opacity: .5; cursor: not-allowed; }
+        .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+        .pill.ok { background: #dcfce7; color: #15803d; }
+        .pill.off { background: #fee2e2; color: #b91c1c; }
+        .pill.warn { background: #fef3c7; color: #b45309; }
+        .pill.tag { background: #e0e7ff; color: #3730a3; margin: 1px 2px; }
+        .msg { padding: 9px 12px; border-radius: 6px; margin-bottom: 14px; font-size: 13px; }
+        .msg.ok { background: #dcfce7; color: #15803d; }
+        .msg.err { background: #fee2e2; color: #b91c1c; }
+        .muted { color: #94a3b8; font-size: 12px; }
+        .actions button { margin: 2px 4px 2px 0; padding: 5px 9px; font-size: 12px; }
+        .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { width: 340px; }
+    </style>
+</head>
+<body>
+    <Routes />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>

@@ -399,212 +399,48 @@ public static class ApiEndpoints
     {
         var admin = api.MapGroup("/admin").AddEndpointFilter<AdminEndpointFilter>();
 
-        // 用户列表（含所挂角色 + 展开后的有效数据范围，不含任何密码信息）
-        admin.MapGet("/users", async (TzhjDbContext db, CancellationToken ct) =>
-        {
-            var now = DateTime.UtcNow;
-            var users = await db.AppUsers.OrderBy(u => u.EmployeeId).ToListAsync(ct);
-            var userRoles = await db.UserRoles
-                .Include(ur => ur.Role!).ThenInclude(r => r.Permissions)
-                .ToListAsync(ct);
+        // 端点都是薄封装，业务逻辑在 IAdminService（与 Blazor 管理后台共用）。
+        // 约定：业务失败走 200 + ApiResult.Success=false（与 login/change-password 一致）。
 
-            var list = users.Select(u =>
-            {
-                var mine = userRoles.Where(x => x.EmployeeId == u.EmployeeId).ToList();
-                return new UserSummary
-                {
-                    EmployeeId = u.EmployeeId,
-                    DisplayName = u.DisplayName,
-                    Department = u.Department,
-                    Position = u.Position,
-                    IsActive = u.IsActive,
-                    IsAdmin = u.IsAdmin,
-                    MustChangePassword = u.MustChangePassword,
-                    IsLocked = u.LockoutUntil is { } until && until > now,
-                    Roles = mine.Select(x => new RoleRef { Id = x.RoleId, Name = x.Role!.Name }).ToList(),
-                    EffectivePermissions = mine.SelectMany(x => x.Role!.Permissions)
-                        .Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName })
-                        .DistinctBy(p => new { p.Flow, p.GroupName })
-                        .ToList(),
-                };
-            }).ToList();
+        // ---- 用户 ----
+        admin.MapGet("/users", async (IAdminService svc, CancellationToken ct) =>
+            Results.Json(await svc.ListUsersAsync(ct)));
 
-            return Results.Json(list);
-        });
+        admin.MapPost("/users", async (CreateUserRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.CreateUserAsync(req, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-        // 新建用户（初始密码下发后首登强制改密）
-        admin.MapPost("/users", async (CreateUserRequest req, IPasswordService pwd, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            var empId = (req.EmployeeId ?? "").Trim();
-            if (empId.Length == 0 || string.IsNullOrWhiteSpace(req.DisplayName))
-                return Results.Json(ApiResult.Fail("工号和姓名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
-            if (string.IsNullOrEmpty(req.InitialPassword) || req.InitialPassword.Length < DbAuthService.MinPasswordLength)
-                return Results.Json(ApiResult.Fail($"初始密码长度至少 {DbAuthService.MinPasswordLength} 位。"), statusCode: StatusCodes.Status400BadRequest);
-            if (await db.AppUsers.AnyAsync(u => u.EmployeeId == empId, ct))
-                return Results.Json(ApiResult.Fail($"工号 {empId} 已存在。"), statusCode: StatusCodes.Status409Conflict);
+        admin.MapPost("/users/{employeeId}/reset-password", async (string employeeId, ResetPasswordRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.ResetPasswordAsync(employeeId, req.NewPassword, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-            db.AppUsers.Add(new AppUser
-            {
-                EmployeeId = empId,
-                DisplayName = req.DisplayName.Trim(),
-                Department = req.Department,
-                Position = req.Position,
-                PasswordHash = pwd.Hash(req.InitialPassword),
-                IsActive = true,
-                IsAdmin = req.IsAdmin,
-                MustChangePassword = true,
-            });
-            LogAdmin(db, ctx, "AdminCreateUser", $"empId={empId}, admin={req.IsAdmin}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已创建用户 {empId}。"));
-        });
+        admin.MapPost("/users/{employeeId}/active", async (string employeeId, SetActiveRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.SetActiveAsync(employeeId, req.IsActive, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-        // 重置密码（重置后首登强制改密、解锁）
-        admin.MapPost("/users/{employeeId}/reset-password", async (string employeeId, ResetPasswordRequest req, IPasswordService pwd, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            if (string.IsNullOrEmpty(req.NewPassword) || req.NewPassword.Length < DbAuthService.MinPasswordLength)
-                return Results.Json(ApiResult.Fail($"新密码长度至少 {DbAuthService.MinPasswordLength} 位。"), statusCode: StatusCodes.Status400BadRequest);
+        admin.MapPut("/users/{employeeId}/roles", async (string employeeId, SetUserRolesRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.SetUserRolesAsync(employeeId, req.RoleIds, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
-            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
+        // ---- 角色 ----
+        admin.MapGet("/roles", async (IAdminService svc, CancellationToken ct) =>
+            Results.Json(await svc.ListRolesAsync(ct)));
 
-            user.PasswordHash = pwd.Hash(req.NewPassword);
-            user.MustChangePassword = true;
-            user.FailedAttempts = 0;
-            user.LockoutUntil = null;
-            user.UpdatedAt = DateTime.UtcNow;
-            LogAdmin(db, ctx, "AdminResetPassword", $"empId={employeeId}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已重置 {employeeId} 的密码。"));
-        });
+        admin.MapPost("/roles", async (SaveRoleRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.CreateRoleAsync(req, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-        // 启用/停用
-        admin.MapPost("/users/{employeeId}/active", async (string employeeId, SetActiveRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            if (!req.IsActive && string.Equals(employeeId, ctx.GetEmployeeId(), StringComparison.Ordinal))
-                return Results.Json(ApiResult.Fail("不能停用当前登录的管理员账号。"), statusCode: StatusCodes.Status400BadRequest);
+        admin.MapPut("/roles/{id:int}", async (int id, SaveRoleRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.UpdateRoleAsync(id, req, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
-            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
+        admin.MapDelete("/roles/{id:int}", async (int id, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.DeleteRoleAsync(id, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
-            user.IsActive = req.IsActive;
-            if (req.IsActive) { user.FailedAttempts = 0; user.LockoutUntil = null; }
-            user.UpdatedAt = DateTime.UtcNow;
-            LogAdmin(db, ctx, "AdminSetActive", $"empId={employeeId}, active={req.IsActive}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已{(req.IsActive ? "启用" : "停用")} {employeeId}。"));
-        });
+        // ---- 操作日志 / 可选组 ----
+        admin.MapGet("/logs", async (string? employeeId, string? action, string? status, string? from, string? to,
+                                     int? page, int? pageSize, IAdminService svc, CancellationToken ct) =>
+            Results.Json(await svc.QueryLogsAsync(employeeId, action, status, from, to, page, pageSize, ct)));
 
-        // 给用户挂角色（覆盖式）——数据可见范围只通过角色授予
-        admin.MapPut("/users/{employeeId}/roles", async (string employeeId, SetUserRolesRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
-            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
-
-            var roleIds = req.RoleIds.Distinct().ToList();
-            var validIds = await db.Roles.Where(r => roleIds.Contains(r.Id)).Select(r => r.Id).ToListAsync(ct);
-            var missing = roleIds.Except(validIds).ToList();
-            if (missing.Count > 0)
-                return Results.Json(ApiResult.Fail($"角色不存在：{string.Join(",", missing)}"), statusCode: StatusCodes.Status400BadRequest);
-
-            var existing = await db.UserRoles.Where(ur => ur.EmployeeId == employeeId).ToListAsync(ct);
-            db.UserRoles.RemoveRange(existing);
-            foreach (var rid in validIds)
-                db.UserRoles.Add(new UserRole { EmployeeId = employeeId, RoleId = rid });
-
-            LogAdmin(db, ctx, "AdminSetUserRoles", $"empId={employeeId}, roles=[{string.Join(",", validIds)}]");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已更新 {employeeId} 的角色。"));
-        });
-
-        // ---- 角色（数据范围捆绑）的增删改查 ----
-
-        // 角色列表（含数据范围 + 挂载人数）
-        admin.MapGet("/roles", async (TzhjDbContext db, CancellationToken ct) =>
-        {
-            var roles = await db.Roles.Include(r => r.Permissions).OrderBy(r => r.Name).ToListAsync(ct);
-            var counts = await db.UserRoles.GroupBy(ur => ur.RoleId)
-                .Select(g => new { RoleId = g.Key, Count = g.Count() }).ToListAsync(ct);
-
-            var list = roles.Select(r => new RoleSummary
-            {
-                Id = r.Id,
-                Name = r.Name,
-                Description = r.Description,
-                Permissions = r.Permissions.Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName }).ToList(),
-                UserCount = counts.FirstOrDefault(c => c.RoleId == r.Id)?.Count ?? 0,
-            }).ToList();
-            return Results.Json(list);
-        });
-
-        // 新建角色
-        admin.MapPost("/roles", async (SaveRoleRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            var name = (req.Name ?? "").Trim();
-            if (name.Length == 0) return Results.Json(ApiResult.Fail("角色名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
-            if (await db.Roles.AnyAsync(r => r.Name == name, ct))
-                return Results.Json(ApiResult.Fail($"角色 {name} 已存在。"), statusCode: StatusCodes.Status409Conflict);
-
-            var role = new Role { Name = name, Description = req.Description, Permissions = BuildRolePermissions(req.Permissions) };
-            db.Roles.Add(role);
-            LogAdmin(db, ctx, "AdminCreateRole", $"name={name}, ranges={role.Permissions.Count}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已创建角色 {name}。"));
-        });
-
-        // 更新角色（名称/描述/数据范围覆盖式）
-        admin.MapPut("/roles/{id:int}", async (int id, SaveRoleRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            var role = await db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Id == id, ct);
-            if (role is null) return Results.Json(ApiResult.Fail("角色不存在。"), statusCode: StatusCodes.Status404NotFound);
-
-            var name = (req.Name ?? "").Trim();
-            if (name.Length == 0) return Results.Json(ApiResult.Fail("角色名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
-            if (await db.Roles.AnyAsync(r => r.Name == name && r.Id != id, ct))
-                return Results.Json(ApiResult.Fail($"角色 {name} 已存在。"), statusCode: StatusCodes.Status409Conflict);
-
-            role.Name = name;
-            role.Description = req.Description;
-            role.UpdatedAt = DateTime.UtcNow;
-            db.RolePermissions.RemoveRange(role.Permissions);
-            role.Permissions.Clear();
-            foreach (var rp in BuildRolePermissions(req.Permissions)) role.Permissions.Add(rp);
-
-            LogAdmin(db, ctx, "AdminUpdateRole", $"id={id}, name={name}, ranges={role.Permissions.Count}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已更新角色 {name}。"));
-        });
-
-        // 删除角色（级联删其数据范围与所有挂载）
-        admin.MapDelete("/roles/{id:int}", async (int id, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
-        {
-            var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == id, ct);
-            if (role is null) return Results.Json(ApiResult.Fail("角色不存在。"), statusCode: StatusCodes.Status404NotFound);
-
-            db.Roles.Remove(role);
-            LogAdmin(db, ctx, "AdminDeleteRole", $"id={id}, name={role.Name}");
-            await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已删除角色 {role.Name}。"));
-        });
+        admin.MapGet("/groups", async (IAdminService svc, CancellationToken ct) =>
+            Results.Json(await svc.ListGroupsAsync(ct)));
     }
 
-    /// <summary>把入参的数据范围去重、去空，转成角色的 RolePermission 列表。</summary>
-    private static List<RolePermission> BuildRolePermissions(List<PermissionDto> input) =>
-        input.Where(p => !string.IsNullOrWhiteSpace(p.GroupName))
-             .DistinctBy(p => new { p.Flow, p.GroupName })
-             .Select(p => new RolePermission { Flow = p.Flow, GroupName = p.GroupName.Trim() })
-             .ToList();
-
-    private static void LogAdmin(TzhjDbContext db, HttpContext ctx, string action, string payload) =>
-        db.ActivityLogs.Add(new ActivityLog
-        {
-            Action = action,
-            EmployeeId = ctx.GetEmployeeId(),
-            Status = "Success",
-            Payload = payload,
-            ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
-            Timestamp = DateTime.UtcNow
-        });
+    private static string? Ip(HttpContext ctx) => ctx.Connection.RemoteIpAddress?.ToString();
 
     private static bool TryParseDt(string s, out DateTime dt) =>
         DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out dt);

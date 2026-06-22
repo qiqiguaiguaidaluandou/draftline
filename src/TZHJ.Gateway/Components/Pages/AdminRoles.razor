@@ -1,0 +1,193 @@
+@page "/admin/roles"
+@attribute [Authorize(Policy = "AdminOnly")]
+@rendermode InteractiveServer
+@inject IServiceScopeFactory ScopeFactory
+
+<h1>角色管理</h1>
+<p class="muted">角色 = 一组“流程 + 组”数据范围的捆绑。给用户挂角色即授予可见数据；组 <code>*</code> 表示该流程全部组。</p>
+
+@if (_msg is not null)
+{
+    <div class="msg @(_ok ? "ok" : "err")">@_msg</div>
+}
+
+<div class="card">
+    <h2>@(_editId is null ? "新建角色" : $"编辑角色 #{_editId}")</h2>
+    <div class="row">
+        <div><label>角色名</label><input @bind="_name" placeholder="如：核价员-组1" /></div>
+        <div><label>描述（可选）</label><input @bind="_desc" /></div>
+    </div>
+
+    <label>数据范围</label>
+    @if (_ranges.Count == 0) { <div class="muted">尚未添加范围。</div> }
+    <div style="margin:6px 0;">
+        @foreach (var r in _ranges)
+        {
+            <span class="pill tag">
+                @FlowText(r.Flow) / @r.GroupName
+                <a href="javascript:void(0)" @onclick="() => RemoveRange(r)" style="margin-left:6px;">✕</a>
+            </span>
+        }
+    </div>
+
+    <div class="row" style="align-items:flex-end;">
+        <div style="max-width:160px;">
+            <label>流程</label>
+            <select @bind="_addFlow">
+                <option value="@FlowType.Pricing">核价（→SRM）</option>
+                <option value="@FlowType.DrawingSelection">挑图（→EBS）</option>
+            </select>
+        </div>
+        <div style="max-width:200px;">
+            <label>组</label>
+            <select @bind="_addGroup">
+                <option value="*">* （全部组）</option>
+                @foreach (var g in GroupsFor(_addFlow))
+                {
+                    <option value="@g">@g</option>
+                }
+            </select>
+        </div>
+        <div style="flex:0 0 auto;"><button class="ghost" @onclick="AddRange">添加范围</button></div>
+    </div>
+
+    <div style="margin-top:16px;">
+        <button disabled="@_busy" @onclick="Save">@(_editId is null ? "创建角色" : "保存修改")</button>
+        @if (_editId is not null)
+        {
+            <button class="ghost" @onclick="ResetForm">取消编辑</button>
+        }
+    </div>
+</div>
+
+<div class="card">
+    <h2>角色列表（@_roles.Count）</h2>
+    <table>
+        <thead><tr><th>名称</th><th>描述</th><th>数据范围</th><th>挂载人数</th><th>操作</th></tr></thead>
+        <tbody>
+            @foreach (var r in _roles)
+            {
+                <tr>
+                    <td>@r.Name</td>
+                    <td class="muted">@r.Description</td>
+                    <td>
+                        @if (r.Permissions.Count == 0) { <span class="muted">无</span> }
+                        else { @foreach (var p in r.Permissions) { <span class="pill tag">@FlowText(p.Flow)/@p.GroupName</span> } }
+                    </td>
+                    <td>@r.UserCount</td>
+                    <td class="actions">
+                        <button class="ghost" @onclick="() => Edit(r)">编辑</button>
+                        <button class="danger" disabled="@_busy" @onclick="() => Delete(r.Id)">删除</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    private List<RoleSummary> _roles = new();
+    private List<GroupOption> _groups = new();
+    private string _actor = "";
+    private bool _busy;
+    private string? _msg;
+    private bool _ok;
+
+    // 表单
+    private int? _editId;
+    private string _name = "", _desc = "";
+    private List<PermissionDto> _ranges = new();
+    private FlowType _addFlow = FlowType.Pricing;
+    private string _addGroup = "*";
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AuthState is not null)
+        {
+            var s = await AuthState;
+            _actor = s.User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
+        }
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+        _roles = await svc.ListRolesAsync();
+        _groups = await svc.ListGroupsAsync();
+    }
+
+    private IEnumerable<string> GroupsFor(FlowType flow) =>
+        _groups.Where(g => g.Flow == flow).Select(g => g.GroupName).Distinct().OrderBy(x => x);
+
+    private static string FlowText(FlowType f) => f == FlowType.Pricing ? "核价" : "挑图";
+
+    private void Show(ApiResult r) { _ok = r.Success; _msg = r.Message; }
+
+    private void AddRange()
+    {
+        if (string.IsNullOrWhiteSpace(_addGroup)) return;
+        if (_ranges.Any(x => x.Flow == _addFlow && x.GroupName == _addGroup)) return;
+        _ranges.Add(new PermissionDto { Flow = _addFlow, GroupName = _addGroup });
+    }
+
+    private void RemoveRange(PermissionDto r) => _ranges.Remove(r);
+
+    private void Edit(RoleSummary r)
+    {
+        _editId = r.Id;
+        _name = r.Name;
+        _desc = r.Description ?? "";
+        _ranges = r.Permissions.Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName }).ToList();
+        _msg = null;
+    }
+
+    private void ResetForm()
+    {
+        _editId = null;
+        _name = _desc = "";
+        _ranges = new();
+        _addFlow = FlowType.Pricing;
+        _addGroup = "*";
+    }
+
+    private async Task Save()
+    {
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            var req = new SaveRoleRequest
+            {
+                Name = _name,
+                Description = string.IsNullOrWhiteSpace(_desc) ? null : _desc,
+                Permissions = _ranges.ToList(),
+            };
+            var r = _editId is null
+                ? await svc.CreateRoleAsync(req, _actor, null)
+                : await svc.UpdateRoleAsync(_editId.Value, req, _actor, null);
+            Show(r);
+            if (r.Success) ResetForm();
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task Delete(int id)
+    {
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            Show(await svc.DeleteRoleAsync(id, _actor, null));
+            if (_editId == id) ResetForm();
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+}
