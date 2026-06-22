@@ -26,7 +26,21 @@ public class DbAuthServiceTests
     }
 
     private static DbAuthService NewService(TzhjDbContext db) =>
-        new(db, Passwords, new JwtTokenService(Jwt));
+        new(db, Passwords, new JwtTokenService(Jwt), new PermissionService(db));
+
+    /// <summary>给用户建一个含指定 (流程,组) 范围的角色并挂上。</summary>
+    private static void SeedRole(TzhjDbContext db, string empId, params (FlowType Flow, string Group)[] grants)
+    {
+        var role = new Role
+        {
+            Name = "role-" + Guid.NewGuid().ToString("N"),
+            Permissions = grants.Select(g => new RolePermission { Flow = g.Flow, GroupName = g.Group }).ToList(),
+        };
+        db.Roles.Add(role);
+        db.SaveChanges();
+        db.UserRoles.Add(new UserRole { EmployeeId = empId, RoleId = role.Id });
+        db.SaveChanges();
+    }
 
     private static AppUser SeedUser(TzhjDbContext db, string empId = "10086", string password = "Secret@123",
         bool active = true, bool mustChange = false)
@@ -45,13 +59,11 @@ public class DbAuthServiceTests
     }
 
     [Fact]
-    public async Task Login_success_returns_token_and_flows_from_permissions()
+    public async Task Login_success_returns_token_and_flows_from_roles()
     {
         using var db = NewDb();
         SeedUser(db);
-        db.UserPermissions.Add(new UserPermission { EmployeeId = "10086", Flow = FlowType.Pricing, GroupName = "组1" });
-        db.UserPermissions.Add(new UserPermission { EmployeeId = "10086", Flow = FlowType.DrawingSelection, GroupName = "*" });
-        db.SaveChanges();
+        SeedRole(db, "10086", (FlowType.Pricing, "组1"), (FlowType.DrawingSelection, "*"));
 
         var result = await NewService(db).LoginAsync("10086", "Secret@123");
 

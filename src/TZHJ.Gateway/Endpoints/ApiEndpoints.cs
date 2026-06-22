@@ -70,15 +70,15 @@ public static class ApiEndpoints
         // --- Remote-First 同步与操作接口 ---
 
         // 1. 同步清单 (基于权限白名单过滤)
-        api.MapGet("/sync/catalog", async (HttpContext ctx, TzhjDbContext db, IServerBatchStore store, CancellationToken ct) =>
+        api.MapGet("/sync/catalog", async (HttpContext ctx, IPermissionService perm, TzhjDbContext db, IServerBatchStore store, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            
-            // 获取当前用户的权限
-            var perms = await db.UserPermissions.Where(p => p.EmployeeId == empId).ToListAsync(ct);
-            if (!perms.Any()) return Results.Json(new List<BatchCatalogItem>()); 
 
-            var allowedFlows = perms.Select(p => p.Flow).ToHashSet();
+            // 当前用户的有效数据范围（角色展开的 (流程,组) 并集）
+            var grants = await perm.GetGrantsAsync(empId, ct);
+            if (grants.Count == 0) return Results.Json(new List<BatchCatalogItem>());
+
+            var allowedFlows = grants.Select(g => g.Flow).ToHashSet();
             var batches = await db.BatchRegistries
                 .Where(b => allowedFlows.Contains(b.Flow))
                 .ToListAsync(ct);
@@ -86,8 +86,8 @@ public static class ApiEndpoints
             var catalog = new List<BatchCatalogItem>();
             foreach (var b in batches)
             {
-                var p = perms.FirstOrDefault(p => p.Flow == b.Flow && (p.GroupName == "*" || p.GroupName == b.GroupName));
-                if (p == null) continue; 
+                var allowed = grants.Any(g => g.Flow == b.Flow && (g.GroupName == "*" || g.GroupName == b.GroupName));
+                if (!allowed) continue;
 
                 var files = await store.ListFilesAsync(b.Flow, b.GroupName, b.BatchId, ct);
                 catalog.Add(new BatchCatalogItem
@@ -105,28 +105,24 @@ public static class ApiEndpoints
         });
 
         // 2. 文件下载 (带权限校验)
-        api.MapGet("/sync/download", async (string flow, string groupName, string batchId, string fileName, 
-                                            HttpContext ctx, IServerBatchStore store, TzhjDbContext db, CancellationToken ct) =>
+        api.MapGet("/sync/download", async (string flow, string groupName, string batchId, string fileName,
+                                            HttpContext ctx, IPermissionService perm, IServerBatchStore store, CancellationToken ct) =>
         {
             if (!Enum.TryParse<FlowType>(flow, ignoreCase: true, out var flowType))
                 return Results.BadRequest("Invalid flow.");
 
             var empId = ctx.GetEmployeeId();
-            var hasPerm = await db.UserPermissions.AnyAsync(p => 
-                p.EmployeeId == empId && p.Flow == flowType && (p.GroupName == "*" || p.GroupName == groupName), ct);
-            if (!hasPerm) return Results.Forbid();
+            if (!await perm.HasAccessAsync(empId, flowType, groupName, ct)) return Results.Forbid();
 
             var stream = store.OpenFile(flowType, groupName, batchId, fileName);
             return stream is null ? Results.NotFound() : Results.File(stream, "application/octet-stream", fileName);
         });
 
         // 3. 行数据更新 (Remote-First 核心，带权限校验)
-        api.MapPost("/batch/update-row", async ([FromBody] UpdateRowRequest req, HttpContext ctx, IServerBatchStore store, TzhjDbContext db, CancellationToken ct) =>
+        api.MapPost("/batch/update-row", async ([FromBody] UpdateRowRequest req, HttpContext ctx, IPermissionService perm, IServerBatchStore store, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            var hasPerm = await db.UserPermissions.AnyAsync(p => 
-                p.EmployeeId == empId && p.Flow == req.Flow && (p.GroupName == "*" || p.GroupName == req.GroupName), ct);
-            if (!hasPerm) return Results.Forbid();
+            if (!await perm.HasAccessAsync(empId, req.Flow, req.GroupName, ct)) return Results.Forbid();
 
             var registry = await db.BatchRegistries.FirstOrDefaultAsync(b => b.BatchId == req.BatchId && b.GroupName == req.GroupName && b.Flow == req.Flow, ct);
             if (registry == null) 
@@ -156,12 +152,10 @@ public static class ApiEndpoints
         });
 
         // 4. 异常挂起
-        api.MapPost("/batch/suspend-exception", async ([FromBody] SuspendExceptionRequest req, HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
+        api.MapPost("/batch/suspend-exception", async ([FromBody] SuspendExceptionRequest req, HttpContext ctx, IPermissionService perm, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            var hasPerm = await db.UserPermissions.AnyAsync(p => 
-                p.EmployeeId == empId && p.Flow == req.Flow && (p.GroupName == "*" || p.GroupName == req.GroupName), ct);
-            if (!hasPerm) return Results.Forbid();
+            if (!await perm.HasAccessAsync(empId, req.Flow, req.GroupName, ct)) return Results.Forbid();
 
             var entity = new ExceptionEntity
             {
@@ -196,16 +190,16 @@ public static class ApiEndpoints
         });
 
         // 5. 异常池查询 (组内共享视野)
-        api.MapGet("/sync/exceptions", async (HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
+        api.MapGet("/sync/exceptions", async (HttpContext ctx, IPermissionService perm, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            var perms = await db.UserPermissions.Where(p => p.EmployeeId == empId).ToListAsync(ct);
-            
+            var grants = await perm.GetGrantsAsync(empId, ct);
+
             var list = new List<ExceptionItem>();
-            foreach (var p in perms)
+            foreach (var g in grants)
             {
                 var groupExceptions = await db.Exceptions
-                    .Where(e => e.Flow == p.Flow && (p.GroupName == "*" || e.GroupName == p.GroupName) && e.Status == RowStatus.Exception)
+                    .Where(e => e.Flow == g.Flow && (g.GroupName == "*" || e.GroupName == g.GroupName) && e.Status == RowStatus.Exception)
                     .Select(e => new ExceptionItem
                     {
                         Flow = e.Flow,
@@ -225,15 +219,13 @@ public static class ApiEndpoints
         });
 
         // 6. 异常处理 (补回传或撤销)
-        api.MapPost("/batch/resolve-exception", async (string flow, string groupName, string batchId, string rowKey, HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
+        api.MapPost("/batch/resolve-exception", async (string flow, string groupName, string batchId, string rowKey, HttpContext ctx, IPermissionService perm, TzhjDbContext db, CancellationToken ct) =>
         {
             if (!Enum.TryParse<FlowType>(flow, ignoreCase: true, out var flowType))
                 return Results.BadRequest("Invalid flow.");
 
             var empId = ctx.GetEmployeeId();
-            var hasPerm = await db.UserPermissions.AnyAsync(p =>
-                p.EmployeeId == empId && p.Flow == flowType && (p.GroupName == "*" || p.GroupName == groupName), ct);
-            if (!hasPerm) return Results.Forbid();
+            if (!await perm.HasAccessAsync(empId, flowType, groupName, ct)) return Results.Forbid();
 
             var entity = await db.Exceptions.FirstOrDefaultAsync(e => e.Flow == flowType && e.SourceBatch == batchId && e.RowKey == rowKey && e.GroupName == groupName, ct);
             if (entity == null && groupName != "Default")
@@ -265,9 +257,11 @@ public static class ApiEndpoints
         });
 
         // 回传：整批正常行 → SRM/EBS（成功判定 + 幂等 + 失败留痕，见 changes/009）
-        api.MapPost("/submit", async ([FromBody] SubmitRequest req, HttpContext ctx, ISubmitSink sink, TzhjDbContext db, CancellationToken ct) =>
+        api.MapPost("/submit", async ([FromBody] SubmitRequest req, HttpContext ctx, IPermissionService perm, ISubmitSink sink, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
+            if (!await perm.HasAccessAsync(empId, req.Flow, req.GroupName, ct)) return Results.Forbid();
+
             var target = req.Flow == FlowType.Pricing ? "SRM" : "EBS";
 
             var registry = await db.BatchRegistries.FirstOrDefaultAsync(b => b.BatchId == req.BatchKey && b.Flow == req.Flow && b.GroupName == req.GroupName, ct);
@@ -405,26 +399,34 @@ public static class ApiEndpoints
     {
         var admin = api.MapGroup("/admin").AddEndpointFilter<AdminEndpointFilter>();
 
-        // 用户列表（含权限，不含任何密码信息）
+        // 用户列表（含所挂角色 + 展开后的有效数据范围，不含任何密码信息）
         admin.MapGet("/users", async (TzhjDbContext db, CancellationToken ct) =>
         {
             var now = DateTime.UtcNow;
             var users = await db.AppUsers.OrderBy(u => u.EmployeeId).ToListAsync(ct);
-            var perms = await db.UserPermissions.ToListAsync(ct);
+            var userRoles = await db.UserRoles
+                .Include(ur => ur.Role!).ThenInclude(r => r.Permissions)
+                .ToListAsync(ct);
 
-            var list = users.Select(u => new UserSummary
+            var list = users.Select(u =>
             {
-                EmployeeId = u.EmployeeId,
-                DisplayName = u.DisplayName,
-                Department = u.Department,
-                Position = u.Position,
-                IsActive = u.IsActive,
-                IsAdmin = u.IsAdmin,
-                MustChangePassword = u.MustChangePassword,
-                IsLocked = u.LockoutUntil is { } until && until > now,
-                Permissions = perms.Where(p => p.EmployeeId == u.EmployeeId)
-                    .Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName })
-                    .ToList(),
+                var mine = userRoles.Where(x => x.EmployeeId == u.EmployeeId).ToList();
+                return new UserSummary
+                {
+                    EmployeeId = u.EmployeeId,
+                    DisplayName = u.DisplayName,
+                    Department = u.Department,
+                    Position = u.Position,
+                    IsActive = u.IsActive,
+                    IsAdmin = u.IsAdmin,
+                    MustChangePassword = u.MustChangePassword,
+                    IsLocked = u.LockoutUntil is { } until && until > now,
+                    Roles = mine.Select(x => new RoleRef { Id = x.RoleId, Name = x.Role!.Name }).ToList(),
+                    EffectivePermissions = mine.SelectMany(x => x.Role!.Permissions)
+                        .Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName })
+                        .DistinctBy(p => new { p.Flow, p.GroupName })
+                        .ToList(),
+                };
             }).ToList();
 
             return Results.Json(list);
@@ -493,32 +495,105 @@ public static class ApiEndpoints
             return Results.Json(ApiResult.Ok($"已{(req.IsActive ? "启用" : "停用")} {employeeId}。"));
         });
 
-        // 覆盖式设置权限（流程+组白名单）
-        admin.MapPut("/users/{employeeId}/permissions", async (string employeeId, SetPermissionsRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        // 给用户挂角色（覆盖式）——数据可见范围只通过角色授予
+        admin.MapPut("/users/{employeeId}/roles", async (string employeeId, SetUserRolesRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
         {
             var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
             if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
 
-            var existing = await db.UserPermissions.Where(p => p.EmployeeId == employeeId).ToListAsync(ct);
-            db.UserPermissions.RemoveRange(existing);
+            var roleIds = req.RoleIds.Distinct().ToList();
+            var validIds = await db.Roles.Where(r => roleIds.Contains(r.Id)).Select(r => r.Id).ToListAsync(ct);
+            var missing = roleIds.Except(validIds).ToList();
+            if (missing.Count > 0)
+                return Results.Json(ApiResult.Fail($"角色不存在：{string.Join(",", missing)}"), statusCode: StatusCodes.Status400BadRequest);
 
-            foreach (var p in req.Permissions
-                         .Where(p => !string.IsNullOrWhiteSpace(p.GroupName))
-                         .DistinctBy(p => new { p.Flow, p.GroupName }))
-            {
-                db.UserPermissions.Add(new UserPermission
-                {
-                    EmployeeId = employeeId,
-                    Flow = p.Flow,
-                    GroupName = p.GroupName.Trim(),
-                });
-            }
+            var existing = await db.UserRoles.Where(ur => ur.EmployeeId == employeeId).ToListAsync(ct);
+            db.UserRoles.RemoveRange(existing);
+            foreach (var rid in validIds)
+                db.UserRoles.Add(new UserRole { EmployeeId = employeeId, RoleId = rid });
 
-            LogAdmin(db, ctx, "AdminSetPermissions", $"empId={employeeId}, count={req.Permissions.Count}");
+            LogAdmin(db, ctx, "AdminSetUserRoles", $"empId={employeeId}, roles=[{string.Join(",", validIds)}]");
             await db.SaveChangesAsync(ct);
-            return Results.Json(ApiResult.Ok($"已更新 {employeeId} 的权限。"));
+            return Results.Json(ApiResult.Ok($"已更新 {employeeId} 的角色。"));
+        });
+
+        // ---- 角色（数据范围捆绑）的增删改查 ----
+
+        // 角色列表（含数据范围 + 挂载人数）
+        admin.MapGet("/roles", async (TzhjDbContext db, CancellationToken ct) =>
+        {
+            var roles = await db.Roles.Include(r => r.Permissions).OrderBy(r => r.Name).ToListAsync(ct);
+            var counts = await db.UserRoles.GroupBy(ur => ur.RoleId)
+                .Select(g => new { RoleId = g.Key, Count = g.Count() }).ToListAsync(ct);
+
+            var list = roles.Select(r => new RoleSummary
+            {
+                Id = r.Id,
+                Name = r.Name,
+                Description = r.Description,
+                Permissions = r.Permissions.Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName }).ToList(),
+                UserCount = counts.FirstOrDefault(c => c.RoleId == r.Id)?.Count ?? 0,
+            }).ToList();
+            return Results.Json(list);
+        });
+
+        // 新建角色
+        admin.MapPost("/roles", async (SaveRoleRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var name = (req.Name ?? "").Trim();
+            if (name.Length == 0) return Results.Json(ApiResult.Fail("角色名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
+            if (await db.Roles.AnyAsync(r => r.Name == name, ct))
+                return Results.Json(ApiResult.Fail($"角色 {name} 已存在。"), statusCode: StatusCodes.Status409Conflict);
+
+            var role = new Role { Name = name, Description = req.Description, Permissions = BuildRolePermissions(req.Permissions) };
+            db.Roles.Add(role);
+            LogAdmin(db, ctx, "AdminCreateRole", $"name={name}, ranges={role.Permissions.Count}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已创建角色 {name}。"));
+        });
+
+        // 更新角色（名称/描述/数据范围覆盖式）
+        admin.MapPut("/roles/{id:int}", async (int id, SaveRoleRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var role = await db.Roles.Include(r => r.Permissions).FirstOrDefaultAsync(r => r.Id == id, ct);
+            if (role is null) return Results.Json(ApiResult.Fail("角色不存在。"), statusCode: StatusCodes.Status404NotFound);
+
+            var name = (req.Name ?? "").Trim();
+            if (name.Length == 0) return Results.Json(ApiResult.Fail("角色名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
+            if (await db.Roles.AnyAsync(r => r.Name == name && r.Id != id, ct))
+                return Results.Json(ApiResult.Fail($"角色 {name} 已存在。"), statusCode: StatusCodes.Status409Conflict);
+
+            role.Name = name;
+            role.Description = req.Description;
+            role.UpdatedAt = DateTime.UtcNow;
+            db.RolePermissions.RemoveRange(role.Permissions);
+            role.Permissions.Clear();
+            foreach (var rp in BuildRolePermissions(req.Permissions)) role.Permissions.Add(rp);
+
+            LogAdmin(db, ctx, "AdminUpdateRole", $"id={id}, name={name}, ranges={role.Permissions.Count}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已更新角色 {name}。"));
+        });
+
+        // 删除角色（级联删其数据范围与所有挂载）
+        admin.MapDelete("/roles/{id:int}", async (int id, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == id, ct);
+            if (role is null) return Results.Json(ApiResult.Fail("角色不存在。"), statusCode: StatusCodes.Status404NotFound);
+
+            db.Roles.Remove(role);
+            LogAdmin(db, ctx, "AdminDeleteRole", $"id={id}, name={role.Name}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已删除角色 {role.Name}。"));
         });
     }
+
+    /// <summary>把入参的数据范围去重、去空，转成角色的 RolePermission 列表。</summary>
+    private static List<RolePermission> BuildRolePermissions(List<PermissionDto> input) =>
+        input.Where(p => !string.IsNullOrWhiteSpace(p.GroupName))
+             .DistinctBy(p => new { p.Flow, p.GroupName })
+             .Select(p => new RolePermission { Flow = p.Flow, GroupName = p.GroupName.Trim() })
+             .ToList();
 
     private static void LogAdmin(TzhjDbContext db, HttpContext ctx, string action, string payload) =>
         db.ActivityLogs.Add(new ActivityLog

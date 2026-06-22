@@ -4,7 +4,7 @@ namespace TZHJ.Gateway.Stores;
 
 /// <summary>
 /// 系统用户（账号由管理员维护，不接 DHR/SSO）。凭证只存哈希，绝不下发。
-/// 权限沿用 <see cref="UserPermission"/>（工号→流程→组）；本表只管"是谁/能不能登录/是不是管理员"。
+/// 数据可见范围通过角色授予（<see cref="UserRole"/>→<see cref="Role"/>）；本表只管"是谁/能不能登录/是不是管理员"。
 /// </summary>
 public sealed class AppUser
 {

@@ -56,17 +56,44 @@ public sealed class SetActiveRequest
     public bool IsActive { get; init; }
 }
 
-/// <summary>一条流程+组的授权。GroupName="*" 代表该流程全部组。</summary>
+/// <summary>一条数据范围：流程+组。GroupName="*" 代表该流程全部组。</summary>
 public sealed class PermissionDto
 {
     public required FlowType Flow { get; init; }
     public required string GroupName { get; init; }
 }
 
-/// <summary>管理员整体替换某用户的权限集合（覆盖式）。</summary>
-public sealed class SetPermissionsRequest
+// ----- 角色（数据范围捆绑）-----
+
+/// <summary>角色引用（用户列表里显示其挂了哪些角色）。</summary>
+public sealed class RoleRef
 {
+    public int Id { get; init; }
+    public required string Name { get; init; }
+}
+
+/// <summary>角色详情（含其数据范围）。</summary>
+public sealed class RoleSummary
+{
+    public int Id { get; init; }
+    public required string Name { get; init; }
+    public string? Description { get; init; }
     public List<PermissionDto> Permissions { get; init; } = new();
+    public int UserCount { get; init; }
+}
+
+/// <summary>新建/更新角色（覆盖式设置其数据范围）。</summary>
+public sealed class SaveRoleRequest
+{
+    public required string Name { get; init; }
+    public string? Description { get; init; }
+    public List<PermissionDto> Permissions { get; init; } = new();
+}
+
+/// <summary>给某用户整体替换所挂角色（覆盖式）。</summary>
+public sealed class SetUserRolesRequest
+{
+    public List<int> RoleIds { get; init; } = new();
 }
 
 /// <summary>用户列表项（不含任何密码信息）。</summary>
@@ -80,7 +107,10 @@ public sealed class UserSummary
     public bool IsAdmin { get; init; }
     public bool MustChangePassword { get; init; }
     public bool IsLocked { get; init; }
-    public List<PermissionDto> Permissions { get; init; } = new();
+    /// <summary>所挂角色。</summary>
+    public List<RoleRef> Roles { get; init; } = new();
+    /// <summary>角色展开后的有效数据范围（并集去重）。</summary>
+    public List<PermissionDto> EffectivePermissions { get; init; } = new();
 }
 
 /// <summary>

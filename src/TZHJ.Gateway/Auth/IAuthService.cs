@@ -30,12 +30,14 @@ public sealed class DbAuthService : IAuthService
     private readonly TzhjDbContext _db;
     private readonly IPasswordService _passwords;
     private readonly ITokenService _tokens;
+    private readonly IPermissionService _permissions;
 
-    public DbAuthService(TzhjDbContext db, IPasswordService passwords, ITokenService tokens)
+    public DbAuthService(TzhjDbContext db, IPasswordService passwords, ITokenService tokens, IPermissionService permissions)
     {
         _db = db;
         _passwords = passwords;
         _tokens = tokens;
+        _permissions = permissions;
     }
 
     public async Task<AuthResult> LoginAsync(string employeeId, string password, CancellationToken ct = default)
@@ -79,11 +81,7 @@ public sealed class DbAuthService : IAuthService
         user.UpdatedAt = now;
         await _db.SaveChangesAsync(ct);
 
-        var flows = await _db.UserPermissions
-            .Where(p => p.EmployeeId == employeeId)
-            .Select(p => p.Flow)
-            .Distinct()
-            .ToListAsync(ct);
+        var flows = await _permissions.GetFlowsAsync(employeeId, ct);
 
         var identity = new OperatorIdentity
         {

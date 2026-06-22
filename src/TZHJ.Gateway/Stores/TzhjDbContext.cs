@@ -11,8 +11,10 @@ public sealed class TzhjDbContext : DbContext
     public DbSet<ActivityLog> ActivityLogs => Set<ActivityLog>();
     public DbSet<BatchRegistry> BatchRegistries => Set<BatchRegistry>();
     public DbSet<ExceptionEntity> Exceptions => Set<ExceptionEntity>();
-    public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
     public DbSet<AppUser> AppUsers => Set<AppUser>();
+    public DbSet<Role> Roles => Set<Role>();
+    public DbSet<RolePermission> RolePermissions => Set<RolePermission>();
+    public DbSet<UserRole> UserRoles => Set<UserRole>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -32,16 +34,42 @@ public sealed class TzhjDbContext : DbContext
             .HasIndex(x => new { x.Flow, x.GroupName, x.Status })
             .HasDatabaseName("idx_exception_lookup");
 
-        // 用户权限查询优化
-        modelBuilder.Entity<UserPermission>()
-            .HasIndex(x => x.EmployeeId)
-            .HasDatabaseName("idx_user_permission_employee");
-
         // 系统用户：工号唯一（登录账号）
         modelBuilder.Entity<AppUser>()
             .HasIndex(x => x.EmployeeId)
             .IsUnique()
             .HasDatabaseName("idx_app_user_employee");
+
+        // 角色：名称唯一
+        modelBuilder.Entity<Role>()
+            .HasIndex(x => x.Name)
+            .IsUnique()
+            .HasDatabaseName("idx_role_name");
+
+        // 角色含的数据范围：删角色级联删其范围；(角色,流程,组) 唯一
+        modelBuilder.Entity<RolePermission>()
+            .HasOne(x => x.Role)
+            .WithMany(r => r.Permissions)
+            .HasForeignKey(x => x.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RolePermission>()
+            .HasIndex(x => new { x.RoleId, x.Flow, x.GroupName })
+            .IsUnique()
+            .HasDatabaseName("idx_role_permission_unique");
+
+        // 用户↔角色：删角色级联删指派；按工号查；(工号,角色) 唯一
+        modelBuilder.Entity<UserRole>()
+            .HasOne(x => x.Role)
+            .WithMany()
+            .HasForeignKey(x => x.RoleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<UserRole>()
+            .HasIndex(x => x.EmployeeId)
+            .HasDatabaseName("idx_user_role_employee");
+        modelBuilder.Entity<UserRole>()
+            .HasIndex(x => new { x.EmployeeId, x.RoleId })
+            .IsUnique()
+            .HasDatabaseName("idx_user_role_unique");
 
         // 统一日志查询优化
         modelBuilder.Entity<ActivityLog>()
