@@ -18,40 +18,50 @@ public static class ApiEndpoints
     {
         app.MapGet("/healthz", () => Results.Ok("ok"));
 
-        // 登录（不需令牌）→ 占位认证签发令牌
-        app.MapPost("/api/auth/login", async (LoginRequest req, IAuthService auth, TzhjDbContext db, IHostEnvironment env, HttpContext ctx) =>
+        // 登录（不需令牌）→ 校验本地凭证、签发 JWT。权限由管理员显式维护（Deny-All 白名单，无自动放权）。
+        app.MapPost("/api/auth/login", async (LoginRequest req, IAuthService auth, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
         {
-            var result = auth.Login(req.EmployeeId, req.Password);
-            if (result.Success)
+            var result = await auth.LoginAsync(req.EmployeeId, req.Password, ct);
+
+            // 登录审计：成功/失败都记一条（失败工号取自请求体，仅作审计线索）。
+            db.ActivityLogs.Add(new ActivityLog
             {
-                var empId = result.Operator!.EmployeeId;
-                // [Auto-Seed] 仅开发环境自动补全权限，方便演示；生产环境遵循 doc ⑧ 的 Deny-All 白名单，
-                // 未在 UserPermissions 显式授权的工号登录后取不到任何数据（权限须由 DBA / 后续管理后台维护）。
-                if (env.IsDevelopment() && !await db.UserPermissions.AnyAsync(p => p.EmployeeId == empId))
-                {
-                    db.UserPermissions.AddRange(
-                        new UserPermission { EmployeeId = empId, Flow = FlowType.Pricing, GroupName = "组1" },
-                        new UserPermission { EmployeeId = empId, Flow = FlowType.DrawingSelection, GroupName = "组1" }
-                    );
-                }
+                Action = "Login",
+                EmployeeId = result.Operator?.EmployeeId ?? (req.EmployeeId ?? "").Trim(),
+                Status = result.Success ? "Success" : "Failed",
+                Payload = result.Success ? null : result.Message,
+                ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
+                Timestamp = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
 
-                // 记录登录日志
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Login",
-                    EmployeeId = empId,
-                    Status = "Success",
-                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
-                    Timestamp = DateTime.UtcNow
-                });
-
-                await db.SaveChangesAsync();
-            }
             return Results.Json(result);
         });
 
         // 受保护组：令牌校验 + 把工号绑进 HttpContext（身份以 token 为准，D2）
         var api = app.MapGroup("/api").AddEndpointFilter<TokenEndpointFilter>();
+
+        // 本人改密（需令牌；工号以令牌为准，忽略请求体工号）
+        api.MapPost("/auth/change-password", async (ChangePasswordRequest req, IAuthService auth, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var empId = ctx.GetEmployeeId();
+            var (ok, msg) = await auth.ChangePasswordAsync(empId, req.OldPassword, req.NewPassword, ct);
+
+            db.ActivityLogs.Add(new ActivityLog
+            {
+                Action = "ChangePassword",
+                EmployeeId = empId,
+                Status = ok ? "Success" : "Failed",
+                Payload = ok ? null : msg,
+                ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
+                Timestamp = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync(ct);
+
+            return Results.Json(ok ? ApiResult.Ok(msg) : ApiResult.Fail(msg));
+        });
+
+        MapAdminApi(api);
 
         // 配置下发
         api.MapGet("/config", (HttpContext ctx, IConfigStore store) =>
@@ -389,6 +399,137 @@ public static class ApiEndpoints
             });
         });
     }
+
+    /// <summary>管理端（/api/admin/*，仅启用中的管理员）：用户与权限维护。</summary>
+    private static void MapAdminApi(RouteGroupBuilder api)
+    {
+        var admin = api.MapGroup("/admin").AddEndpointFilter<AdminEndpointFilter>();
+
+        // 用户列表（含权限，不含任何密码信息）
+        admin.MapGet("/users", async (TzhjDbContext db, CancellationToken ct) =>
+        {
+            var now = DateTime.UtcNow;
+            var users = await db.AppUsers.OrderBy(u => u.EmployeeId).ToListAsync(ct);
+            var perms = await db.UserPermissions.ToListAsync(ct);
+
+            var list = users.Select(u => new UserSummary
+            {
+                EmployeeId = u.EmployeeId,
+                DisplayName = u.DisplayName,
+                Department = u.Department,
+                Position = u.Position,
+                IsActive = u.IsActive,
+                IsAdmin = u.IsAdmin,
+                MustChangePassword = u.MustChangePassword,
+                IsLocked = u.LockoutUntil is { } until && until > now,
+                Permissions = perms.Where(p => p.EmployeeId == u.EmployeeId)
+                    .Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName })
+                    .ToList(),
+            }).ToList();
+
+            return Results.Json(list);
+        });
+
+        // 新建用户（初始密码下发后首登强制改密）
+        admin.MapPost("/users", async (CreateUserRequest req, IPasswordService pwd, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var empId = (req.EmployeeId ?? "").Trim();
+            if (empId.Length == 0 || string.IsNullOrWhiteSpace(req.DisplayName))
+                return Results.Json(ApiResult.Fail("工号和姓名不能为空。"), statusCode: StatusCodes.Status400BadRequest);
+            if (string.IsNullOrEmpty(req.InitialPassword) || req.InitialPassword.Length < DbAuthService.MinPasswordLength)
+                return Results.Json(ApiResult.Fail($"初始密码长度至少 {DbAuthService.MinPasswordLength} 位。"), statusCode: StatusCodes.Status400BadRequest);
+            if (await db.AppUsers.AnyAsync(u => u.EmployeeId == empId, ct))
+                return Results.Json(ApiResult.Fail($"工号 {empId} 已存在。"), statusCode: StatusCodes.Status409Conflict);
+
+            db.AppUsers.Add(new AppUser
+            {
+                EmployeeId = empId,
+                DisplayName = req.DisplayName.Trim(),
+                Department = req.Department,
+                Position = req.Position,
+                PasswordHash = pwd.Hash(req.InitialPassword),
+                IsActive = true,
+                IsAdmin = req.IsAdmin,
+                MustChangePassword = true,
+            });
+            LogAdmin(db, ctx, "AdminCreateUser", $"empId={empId}, admin={req.IsAdmin}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已创建用户 {empId}。"));
+        });
+
+        // 重置密码（重置后首登强制改密、解锁）
+        admin.MapPost("/users/{employeeId}/reset-password", async (string employeeId, ResetPasswordRequest req, IPasswordService pwd, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (string.IsNullOrEmpty(req.NewPassword) || req.NewPassword.Length < DbAuthService.MinPasswordLength)
+                return Results.Json(ApiResult.Fail($"新密码长度至少 {DbAuthService.MinPasswordLength} 位。"), statusCode: StatusCodes.Status400BadRequest);
+
+            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
+            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
+
+            user.PasswordHash = pwd.Hash(req.NewPassword);
+            user.MustChangePassword = true;
+            user.FailedAttempts = 0;
+            user.LockoutUntil = null;
+            user.UpdatedAt = DateTime.UtcNow;
+            LogAdmin(db, ctx, "AdminResetPassword", $"empId={employeeId}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已重置 {employeeId} 的密码。"));
+        });
+
+        // 启用/停用
+        admin.MapPost("/users/{employeeId}/active", async (string employeeId, SetActiveRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            if (!req.IsActive && string.Equals(employeeId, ctx.GetEmployeeId(), StringComparison.Ordinal))
+                return Results.Json(ApiResult.Fail("不能停用当前登录的管理员账号。"), statusCode: StatusCodes.Status400BadRequest);
+
+            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
+            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
+
+            user.IsActive = req.IsActive;
+            if (req.IsActive) { user.FailedAttempts = 0; user.LockoutUntil = null; }
+            user.UpdatedAt = DateTime.UtcNow;
+            LogAdmin(db, ctx, "AdminSetActive", $"empId={employeeId}, active={req.IsActive}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已{(req.IsActive ? "启用" : "停用")} {employeeId}。"));
+        });
+
+        // 覆盖式设置权限（流程+组白名单）
+        admin.MapPut("/users/{employeeId}/permissions", async (string employeeId, SetPermissionsRequest req, TzhjDbContext db, HttpContext ctx, CancellationToken ct) =>
+        {
+            var user = await db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
+            if (user is null) return Results.Json(ApiResult.Fail("用户不存在。"), statusCode: StatusCodes.Status404NotFound);
+
+            var existing = await db.UserPermissions.Where(p => p.EmployeeId == employeeId).ToListAsync(ct);
+            db.UserPermissions.RemoveRange(existing);
+
+            foreach (var p in req.Permissions
+                         .Where(p => !string.IsNullOrWhiteSpace(p.GroupName))
+                         .DistinctBy(p => new { p.Flow, p.GroupName }))
+            {
+                db.UserPermissions.Add(new UserPermission
+                {
+                    EmployeeId = employeeId,
+                    Flow = p.Flow,
+                    GroupName = p.GroupName.Trim(),
+                });
+            }
+
+            LogAdmin(db, ctx, "AdminSetPermissions", $"empId={employeeId}, count={req.Permissions.Count}");
+            await db.SaveChangesAsync(ct);
+            return Results.Json(ApiResult.Ok($"已更新 {employeeId} 的权限。"));
+        });
+    }
+
+    private static void LogAdmin(TzhjDbContext db, HttpContext ctx, string action, string payload) =>
+        db.ActivityLogs.Add(new ActivityLog
+        {
+            Action = action,
+            EmployeeId = ctx.GetEmployeeId(),
+            Status = "Success",
+            Payload = payload,
+            ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
+            Timestamp = DateTime.UtcNow
+        });
 
     private static bool TryParseDt(string s, out DateTime dt) =>
         DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out dt);

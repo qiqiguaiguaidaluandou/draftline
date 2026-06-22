@@ -11,22 +11,39 @@ namespace TZHJ.App.Views;
 public partial class ShellWindow : Window
 {
     private readonly IDialogService _dialog;
+    private readonly ISession _session;
 
-    public ShellWindow(ShellViewModel vm, IDialogService dialog)
+    public ShellWindow(ShellViewModel vm, IDialogService dialog, ISession session)
     {
         InitializeComponent();
         DataContext = vm;
         _dialog = dialog;
+        _session = session;
         dialog.ToastRequested += ShowToast;
+
+        // 初始/重置密码后首登：强制提示改密。
+        Loaded += (_, _) =>
+        {
+            if (_session.MustChangePassword)
+            {
+                _dialog.Info("当前为初始/重置密码，请先修改密码。");
+                ShowChangePassword();
+            }
+        };
     }
 
-    /// <summary>更改密码（占位）：校验通过后提示由 DHR 统一管理、接口接入后生效。</summary>
+    /// <summary>更改密码：弹窗校验并调后端，成功后提示。</summary>
     private void OnChangePassword(object sender, RoutedEventArgs e)
     {
         AccountToggle.IsChecked = false;
+        ShowChangePassword();
+    }
+
+    private void ShowChangePassword()
+    {
         var dlg = new ChangePasswordWindow { Owner = this };
         if (dlg.ShowDialog() == true)
-            _dialog.Info("密码由 DHR 统一管理，接口接入后生效。");
+            _dialog.Info("密码已更新。");
     }
 
     /// <summary>退出登录：确认后重启进程回到登录界面（会话为单例，重启最稳妥）。</summary>

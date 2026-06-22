@@ -10,9 +10,11 @@ public sealed class AuthResult
 {
     public bool Success { get; init; }
     public OperatorIdentity? Operator { get; init; }
-    /// <summary>会话令牌（后续调用带上；Mock 为占位串）。</summary>
+    /// <summary>会话令牌（后续调用带上；为带签名/过期的 JWT）。</summary>
     public string? Token { get; init; }
     public string? Message { get; init; }
+    /// <summary>是否必须先改密（管理员新建/重置后下发的初始密码，登录后强制修改）。</summary>
+    public bool MustChangePassword { get; init; }
 
     public static AuthResult Fail(string message) => new() { Success = false, Message = message };
 }

@@ -34,4 +34,14 @@ public sealed class HttpAuthGateway : IAuthGateway
 
         return result;
     }
+
+    public async Task<ApiResult> ChangePasswordAsync(string oldPassword, string newPassword, CancellationToken ct = default)
+    {
+        var request = new ChangePasswordRequest { OldPassword = oldPassword, NewPassword = newPassword };
+        using var response = await _http.PostAsJsonAsync("/api/auth/change-password", request, HttpJson.Options, ct);
+        response.EnsureSuccessStatusCode();
+
+        return await response.Content.ReadFromJsonAsync<ApiResult>(HttpJson.Options, ct)
+               ?? ApiResult.Fail("改密响应为空。");
+    }
 }

@@ -26,6 +26,9 @@
     </PackageReference>
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.*" />
     <PackageReference Include="NPOI" Version="2.8.0" />
+    <!-- 认证：密码哈希（PBKDF2，PasswordHasher&lt;T&gt;）+ 带签名/过期的 JWT -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="8.0.*" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.*" />
   </ItemGroup>
 
 </Project>

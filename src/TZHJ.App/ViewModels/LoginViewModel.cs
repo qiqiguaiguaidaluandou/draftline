@@ -33,7 +33,7 @@ public sealed partial class LoginViewModel : ObservableObject
         _storage = storage;
     }
 
-    [ObservableProperty] private string _employeeId = "108645";
+    [ObservableProperty] private string _employeeId = string.Empty;
     [ObservableProperty] private string _password = string.Empty;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private string? _error;
@@ -44,10 +44,18 @@ public sealed partial class LoginViewModel : ObservableObject
     private async Task LoginAsync()
     {
         Error = null;
+
+        var empId = EmployeeId.Trim();
+        if (empId.Length == 0 || Password.Length == 0)
+        {
+            Error = "请输入工号和密码。";
+            return;
+        }
+
         IsBusy = true;
         try
         {
-            var auth = await _auth.LoginAsync(EmployeeId.Trim(), Password);
+            var auth = await _auth.LoginAsync(empId, Password);
             if (!auth.Success || auth.Operator is null)
             {
                 Error = auth.Message ?? "登录失败。";
@@ -58,7 +66,7 @@ public sealed partial class LoginViewModel : ObservableObject
             var config = await _config.GetConfigAsync(auth.Operator.EmployeeId);
             _fieldProvider.Apply(config);
             _storage.Root = config.LocalRoot;
-            _session.SignIn(auth.Operator, config);
+            _session.SignIn(auth.Operator, config, auth.MustChangePassword);
 
             LoginSucceeded?.Invoke(this, EventArgs.Empty);
         }

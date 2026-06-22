@@ -33,9 +33,13 @@ var storageOptions = new ServerStorageOptions();
 builder.Configuration.GetSection("Storage").Bind(storageOptions);
 builder.Services.AddSingleton(storageOptions);
 
-// ---------- 认证/授权（占位） ----------
-builder.Services.AddSingleton<ITokenService, FakeTokenService>();
-builder.Services.AddSingleton<IAuthService, FakeAuthService>();
+// ---------- 认证/授权（本地凭证，管理员维护） ----------
+var jwtOptions = new JwtOptions();
+builder.Configuration.GetSection("Jwt").Bind(jwtOptions);
+builder.Services.AddSingleton(jwtOptions);
+builder.Services.AddSingleton<ITokenService, JwtTokenService>();
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IAuthService, DbAuthService>();
 
 // ---------- 字段提供者 ----------
 builder.Services.AddSingleton<IFieldProvider, ServerFieldProvider>();
@@ -56,6 +60,53 @@ builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataS
 
 var app = builder.Build();
 
+// 启动种子：仅当用户表为空且配置了 Admin 段时，建第一个管理员（引导入口）。
+await SeedBootstrapAdminAsync(app);
+
 app.MapTzhjApi();
 
 app.Run();
+
+// 引导管理员：避免"有库无人能登录"。生产请在 appsettings.local.json 配 Admin 段并改默认口令。
+static async Task SeedBootstrapAdminAsync(WebApplication app)
+{
+    var section = app.Configuration.GetSection("Admin");
+    var empId = section["EmployeeId"];
+    var password = section["Password"];
+    if (string.IsNullOrWhiteSpace(empId) || string.IsNullOrWhiteSpace(password))
+        return; // 未配置则不种子
+
+    using var scope = app.Services.CreateScope();
+    var sp = scope.ServiceProvider;
+    var logger = sp.GetRequiredService<ILoggerFactory>().CreateLogger("BootstrapAdmin");
+    try
+    {
+        var db = sp.GetRequiredService<TzhjDbContext>();
+        if (!await db.Database.CanConnectAsync())
+        {
+            logger.LogWarning("种子管理员跳过：数据库不可达。");
+            return;
+        }
+        if (await db.AppUsers.AnyAsync())
+            return; // 已有用户，不再种子
+
+        var pwd = sp.GetRequiredService<IPasswordService>();
+        db.AppUsers.Add(new AppUser
+        {
+            EmployeeId = empId.Trim(),
+            DisplayName = section["DisplayName"] ?? "系统管理员",
+            Department = section["Department"],
+            Position = section["Position"],
+            PasswordHash = pwd.Hash(password),
+            IsActive = true,
+            IsAdmin = true,
+            MustChangePassword = true, // 首登强制改默认口令
+        });
+        await db.SaveChangesAsync();
+        logger.LogInformation("已创建引导管理员 {EmployeeId}（首登须改密）。", empId);
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "种子管理员失败（可能尚未应用迁移），可稍后手动创建。");
+    }
+}

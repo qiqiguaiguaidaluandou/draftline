@@ -8,7 +8,9 @@ public interface ISession
     OperatorIdentity Operator { get; }
     ClientConfig Config { get; }
     bool IsAuthenticated { get; }
-    void SignIn(OperatorIdentity op, ClientConfig config);
+    /// <summary>本次登录是否被要求先改密（初始/重置密码后）。改密成功后由调用方清除。</summary>
+    bool MustChangePassword { get; set; }
+    void SignIn(OperatorIdentity op, ClientConfig config, bool mustChangePassword = false);
 }
 
 public sealed class Session : ISession
@@ -19,10 +21,12 @@ public sealed class Session : ISession
     public OperatorIdentity Operator => _operator ?? throw new InvalidOperationException("尚未登录。");
     public ClientConfig Config => _config ?? throw new InvalidOperationException("尚未登录。");
     public bool IsAuthenticated => _operator is not null;
+    public bool MustChangePassword { get; set; }
 
-    public void SignIn(OperatorIdentity op, ClientConfig config)
+    public void SignIn(OperatorIdentity op, ClientConfig config, bool mustChangePassword = false)
     {
         _operator = op;
         _config = config;
+        MustChangePassword = mustChangePassword;
     }
 }

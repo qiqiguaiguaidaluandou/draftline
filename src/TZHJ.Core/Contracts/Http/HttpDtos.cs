@@ -14,6 +14,75 @@ public sealed class LoginRequest
     public required string Password { get; init; }
 }
 
+/// <summary>本人改密请求体（POST /api/auth/change-password，需令牌；工号以令牌为准）。</summary>
+public sealed class ChangePasswordRequest
+{
+    public required string OldPassword { get; init; }
+    public required string NewPassword { get; init; }
+}
+
+/// <summary>通用结果（改密 / 管理操作）：成功标志 + 提示文案。</summary>
+public sealed class ApiResult
+{
+    public bool Success { get; init; }
+    public string? Message { get; init; }
+
+    public static ApiResult Ok(string? message = null) => new() { Success = true, Message = message };
+    public static ApiResult Fail(string message) => new() { Success = false, Message = message };
+}
+
+// ========== 管理端（/api/admin/*，仅管理员）==========
+
+/// <summary>管理员新建用户。初始密码下发后用户首登强制改密。</summary>
+public sealed class CreateUserRequest
+{
+    public required string EmployeeId { get; init; }
+    public required string DisplayName { get; init; }
+    public string? Department { get; init; }
+    public string? Position { get; init; }
+    public required string InitialPassword { get; init; }
+    public bool IsAdmin { get; init; }
+}
+
+/// <summary>管理员重置某用户密码（重置后该用户首登强制改密、解锁）。</summary>
+public sealed class ResetPasswordRequest
+{
+    public required string NewPassword { get; init; }
+}
+
+/// <summary>管理员启用/停用某用户。</summary>
+public sealed class SetActiveRequest
+{
+    public bool IsActive { get; init; }
+}
+
+/// <summary>一条流程+组的授权。GroupName="*" 代表该流程全部组。</summary>
+public sealed class PermissionDto
+{
+    public required FlowType Flow { get; init; }
+    public required string GroupName { get; init; }
+}
+
+/// <summary>管理员整体替换某用户的权限集合（覆盖式）。</summary>
+public sealed class SetPermissionsRequest
+{
+    public List<PermissionDto> Permissions { get; init; } = new();
+}
+
+/// <summary>用户列表项（不含任何密码信息）。</summary>
+public sealed class UserSummary
+{
+    public required string EmployeeId { get; init; }
+    public required string DisplayName { get; init; }
+    public string? Department { get; init; }
+    public string? Position { get; init; }
+    public bool IsActive { get; init; }
+    public bool IsAdmin { get; init; }
+    public bool MustChangePassword { get; init; }
+    public bool IsLocked { get; init; }
+    public List<PermissionDto> Permissions { get; init; } = new();
+}
+
 /// <summary>
 /// 取数响应（第一阶段）：行数据 + 每行图纸的**元数据**（不含字节）。
 /// 客户端拿到后对每张图纸调 GET /api/drawings 流式下载，再拼成 TZHJ.Core 的 FetchResult。

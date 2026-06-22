@@ -12,6 +12,7 @@ public sealed class TzhjDbContext : DbContext
     public DbSet<BatchRegistry> BatchRegistries => Set<BatchRegistry>();
     public DbSet<ExceptionEntity> Exceptions => Set<ExceptionEntity>();
     public DbSet<UserPermission> UserPermissions => Set<UserPermission>();
+    public DbSet<AppUser> AppUsers => Set<AppUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -35,6 +36,12 @@ public sealed class TzhjDbContext : DbContext
         modelBuilder.Entity<UserPermission>()
             .HasIndex(x => x.EmployeeId)
             .HasDatabaseName("idx_user_permission_employee");
+
+        // 系统用户：工号唯一（登录账号）
+        modelBuilder.Entity<AppUser>()
+            .HasIndex(x => x.EmployeeId)
+            .IsUnique()
+            .HasDatabaseName("idx_app_user_employee");
 
         // 统一日志查询优化
         modelBuilder.Entity<ActivityLog>()
