@@ -1,3 +1,4 @@
+using System.Globalization;
 using TZHJ.Core.Contracts;
 using TZHJ.Core.Contracts.Http;
 using TZHJ.Core.Enums;
@@ -128,9 +129,27 @@ public sealed class DataIngestionService : BackgroundService
     /// 检查所有排程：触发时刻已过、且对应批次尚未采集的就采。
     /// 回看「昨天 + 今天」两天的触发点，以便服务重启后补采错过的批次（已存在的会跳过，不重复调接口）。
     /// </summary>
+    /// <summary>
+    /// 采集排程使用的"当前时间"。配置 `Ingestion:NowOverride`（如 "2026-05-28 17:00:00"）时返回该固定值，
+    /// 仅用于**开发期临时**把排程窗口挪到有数据的历史日期来验证全链路。
+    /// 只影响排程窗口计算，不动鉴权 JWT、批次清理、各类时间戳（它们仍用真实时间）。
+    /// 改回真实时间：把配置项清空即可，无需改代码。
+    /// </summary>
+    private DateTime SchedulingNow()
+    {
+        var ovr = _config["Ingestion:NowOverride"];
+        if (!string.IsNullOrWhiteSpace(ovr) &&
+            DateTime.TryParse(ovr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+        {
+            _logger.LogWarning("⚠ 采集排程正在使用覆盖时间 {Override}（Ingestion:NowOverride），仅供测试，验证完请清空该配置！", dt);
+            return dt;
+        }
+        return DateTime.Now;
+    }
+
     private async Task CheckSchedulesAsync(CancellationToken ct)
     {
-        var now = DateTime.Now;
+        var now = SchedulingNow();
 
         foreach (var triggerDate in new[] { now.Date.AddDays(-1), now.Date })
         {
