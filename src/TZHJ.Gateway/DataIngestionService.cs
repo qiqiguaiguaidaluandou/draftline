@@ -190,7 +190,17 @@ public sealed class DataIngestionService : BackgroundService
         Dictionary<string, IReadOnlyList<SourceRow>> byGroup;
         if (flow == FlowType.Pricing)
         {
-            var prefixToExpected = expectedGroups.ToDictionary(CanonicalGroup, g => g);
+            // 期望组名 → "组N"前缀的映射。若配置里两个组共用同一前缀（如都以"组1"开头），
+            // 无法判断 EBS 里标"组1"的行该归到哪个，属配置歧义：首个胜出 + 告警，不让整批采集崩溃。
+            var prefixToExpected = new Dictionary<string, string>();
+            foreach (var g in expectedGroups)
+            {
+                var prefix = CanonicalGroup(g);
+                if (!prefixToExpected.TryAdd(prefix, g))
+                    _logger.LogWarning(
+                        "Ebs:PricingGroups 存在重复的组别前缀 {Prefix}（{Kept} 与 {Dup}）；标该前缀的数据行将归到前者，请检查配置。",
+                        prefix, prefixToExpected[prefix], g);
+            }
             byGroup = rows
                 .GroupBy(r =>
                 {
