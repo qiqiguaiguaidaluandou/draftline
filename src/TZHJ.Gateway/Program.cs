@@ -83,7 +83,14 @@ builder.Services.AddSingleton<FakeDataSource>();
 builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
 
 if (ebsOptions.Enabled)
+{
+    // PLM 富化（变更状态 + 图纸下载），鉴权复用 EBS 的 EbsTokenProvider。URL 留空则对应步骤跳过。
+    var plmOptions = new PlmOptions();
+    builder.Configuration.GetSection("Plm").Bind(plmOptions);
+    builder.Services.AddSingleton(plmOptions);
+    builder.Services.AddHttpClient<PlmClient>();
     builder.Services.AddHttpClient<IEbsPlmSource, EbsPlmSource>();
+}
 else
     builder.Services.AddSingleton<IEbsPlmSource>(sp => sp.GetRequiredService<FakeDataSource>());
 

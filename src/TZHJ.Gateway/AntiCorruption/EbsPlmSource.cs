@@ -11,21 +11,24 @@ namespace TZHJ.Gateway.AntiCorruption;
 ///   核价 CUX_AI_DRW_COST（带 GROUP_NAME 分组）、挑图 CUX_AI_MACH_DRW（不分组）。
 /// 时间窗口由调用方（DataIngestionService）按项目规则给定，这里只负责取数与字段映射。
 ///
-/// 注意：图纸文件与"是否变更"(hasChange) 来自 PLM，本类暂不涉及——
-///   OpenDrawingAsync 返回 null（UI 标"缺失"），hasChange 字段留空，待 PLM 接口文档到位后补（见 TODO）。
+/// 取到 EBS 基础数据后，按物料编码调 PLM 富化（EnrichWithPlmAsync）：填 hasChange（Y/N）、
+/// 下载图纸字节挂到行上（随表格一起落进批次文件夹）。PLM URL 未配置时这一步自动跳过。
+/// OpenDrawingAsync 仍返回 null——图纸在取数阶段已下载落盘，由磁盘流式服务，无控制器走此方法。
 /// </summary>
 public sealed class EbsPlmSource : IEbsPlmSource
 {
     private readonly HttpClient _http;
     private readonly EbsOptions _opt;
     private readonly EbsTokenProvider _token;
+    private readonly PlmClient _plm;
     private readonly ILogger<EbsPlmSource> _logger;
 
-    public EbsPlmSource(HttpClient http, EbsOptions opt, EbsTokenProvider token, ILogger<EbsPlmSource> logger)
+    public EbsPlmSource(HttpClient http, EbsOptions opt, EbsTokenProvider token, PlmClient plm, ILogger<EbsPlmSource> logger)
     {
         _http = http;
         _opt = opt;
         _token = token;
+        _plm = plm;
         _logger = logger;
     }
 
@@ -61,16 +64,58 @@ public sealed class EbsPlmSource : IEbsPlmSource
         }
 
         var dataArray = ParseEnvelope(raw, batchNumber);
-        return flow == FlowType.Pricing ? MapPricing(dataArray) : MapDrawing(dataArray);
+        var rows = flow == FlowType.Pricing ? MapPricing(dataArray) : MapDrawing(dataArray);
+
+        // PLM 富化：填 hasChange、下载图纸字节。两个 flow 的 materialCode/hasChange 键名相同（均为常量字符串）。
+        var mcKey = flow == FlowType.Pricing ? FieldSchemas.PricingKeys.MaterialCode : FieldSchemas.DrawingKeys.MaterialCode;
+        var hcKey = flow == FlowType.Pricing ? FieldSchemas.PricingKeys.HasChange : FieldSchemas.DrawingKeys.HasChange;
+        await EnrichWithPlmAsync(rows, mcKey, hcKey, ct);
+        return rows;
     }
 
-    /// <summary>图纸字节来自 PLM，EBS 接口不提供。PLM 接口到位前返回 null（→404 / UI 标"缺失"）。</summary>
+    /// <summary>
+    /// 按物料编码调 PLM：①变更状态 → hasChange 填 Y/N（未返回的料号留空）；②图纸附件 → 下载字节挂到对应行。
+    /// PLM 调用失败会向上抛（本批不登记、下个轮询重采）；单料号缺数据/单文件下载失败不阻断其余行。
+    /// </summary>
+    private async Task EnrichWithPlmAsync(IReadOnlyList<SourceRow> rows, string mcKey, string hcKey, CancellationToken ct)
+    {
+        if (rows.Count == 0) return;
+
+        var codes = rows
+            .Select(r => r.Values.TryGetValue(mcKey, out var c) ? c : null)
+            .Where(c => !string.IsNullOrWhiteSpace(c))
+            .Select(c => c!.Trim())
+            .Distinct()
+            .ToList();
+        if (codes.Count == 0) return;
+
+        var changeFlags = await _plm.FetchChangeFlagsAsync(codes, ct);
+        var drawings = await _plm.FetchDrawingsAsync(codes, ct);
+
+        foreach (var r in rows)
+        {
+            if (!r.Values.TryGetValue(mcKey, out var raw) || string.IsNullOrWhiteSpace(raw)) continue;
+            var code = raw.Trim();
+
+            if (changeFlags.TryGetValue(code, out var isChange))
+                r.Values[hcKey] = isChange ? "Y" : "N";
+
+            if (drawings.TryGetValue(code, out var files))
+                foreach (var (fileName, content) in files)
+                    r.Drawings.Add(new SourceDrawing
+                    {
+                        DrawingId = fileName,   // = 文件名，落盘即此名，磁盘流式端点按此查找
+                        FileName = fileName,
+                        MaterialCode = code,
+                        Content = content,
+                    });
+        }
+    }
+
+    /// <summary>图纸在取数阶段已下载落盘、由磁盘流式服务，无控制器走此方法。保留接口契约，返回 null。</summary>
     public Task<byte[]?> OpenDrawingAsync(
         FlowType flow, string employeeId, DateTime windowStart, DateTime windowEnd, string drawingId, CancellationToken ct = default)
-    {
-        // TODO(PLM): 接 PLM 接口，按物料编码取图纸字节。
-        return Task.FromResult<byte[]?>(null);
-    }
+        => Task.FromResult<byte[]?>(null);
 
     // ===== 解析：外层 OutputParameters → X_RETURN_CODE 判错 → X_RESPONSE_DATA(字符串)二次解析 → DATA 数组 =====
 
@@ -120,7 +165,7 @@ public sealed class EbsPlmSource : IEbsPlmSource
                     [FieldSchemas.PricingKeys.Name] = Str(r, "ITEM_NAME"),
                     [FieldSchemas.PricingKeys.MaterialDesc] = Str(r, "ITEM_DESC"),
                     [FieldSchemas.PricingKeys.DemandQty] = Str(r, "TTL_QTY"),
-                    [FieldSchemas.PricingKeys.HasChange] = null,   // TODO(PLM)
+                    [FieldSchemas.PricingKeys.HasChange] = null,   // 由 PLM 富化填 Y/N（EnrichWithPlmAsync）
                     [FieldSchemas.PricingKeys.TargetPrice] = null, // 手填
                 },
             });
@@ -156,7 +201,7 @@ public sealed class EbsPlmSource : IEbsPlmSource
                     [FieldSchemas.DrawingKeys.DemandDate] = Str(r, "NEED_BY_DATE"),
                     [FieldSchemas.DrawingKeys.Applicant] = Str(r, "EMPLOYEE_NAME"),
                     [FieldSchemas.DrawingKeys.Remark] = Str(r, "REMARKS"),
-                    [FieldSchemas.DrawingKeys.HasChange] = null,  // TODO(PLM)
+                    [FieldSchemas.DrawingKeys.HasChange] = null,  // 由 PLM 富化填 Y/N（EnrichWithPlmAsync）
                     [FieldSchemas.DrawingKeys.CanMachine] = null, // 手填
                 },
             });
