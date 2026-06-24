@@ -5,6 +5,7 @@ using TZHJ.Core.Contracts;
 using TZHJ.Core.Contracts.Http;
 using TZHJ.Core.Enums;
 using TZHJ.Core.Models;
+using TZHJ.Core.Schemas;
 using TZHJ.Gateway.AntiCorruption;
 using TZHJ.Gateway.Auth;
 using TZHJ.Gateway.Stores;
@@ -310,16 +311,36 @@ public static class ApiEndpoints
                 return Results.Json(new SubmitResult { Success = false, Message = $"回传 {target} 失败，批次未完成，可重试。" });
             }
 
-            // 逐行永久失败（如"物料编码不存在"）：单独留痕，但不阻断批次——成功行已回传、失败行重试也不会成功。
+            // 逐行永久失败（如"物料编码不存在"）：写入云端异常表（与手动挂起同一张表/事务），并记留痕日志，但不阻断批次。
+            // 必须落 DB——Remote-First：同步服务会全量覆盖本地异常池，只写本地不落库则同步后丢失。
             var failedRows = rowResults.Where(r => !r.Success).ToList();
             if (failedRows.Count > 0)
             {
+                var rowByKey = req.Rows.GroupBy(r => r.RowKey).ToDictionary(g => g.Key, g => g.First());
+                foreach (var fr in failedRows)
+                {
+                    rowByKey.TryGetValue(fr.RowKey, out var src);
+                    db.Exceptions.Add(new ExceptionEntity
+                    {
+                        GroupName = req.GroupName,
+                        Flow = req.Flow,
+                        RowKey = fr.RowKey,
+                        MaterialCode = src?.Values.GetValueOrDefault(FieldSchemas.PricingKeys.MaterialCode) ?? fr.RowKey,
+                        DisplayName = src?.Values.GetValueOrDefault(FieldSchemas.PricingKeys.Name)
+                                   ?? src?.Values.GetValueOrDefault(FieldSchemas.PricingKeys.MaterialDesc),
+                        SourceBatch = req.BatchKey,
+                        Reason = $"{target}回传失败：{fr.Message}",
+                        Status = RowStatus.Exception,
+                        SuspendedAt = DateTime.UtcNow,
+                    });
+                }
+
                 var detail = string.Join("; ", failedRows.Select(r => $"{r.RowKey}({r.Message})"));
                 db.ActivityLogs.Add(new ActivityLog
                 {
                     Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
                     ImpactCount = failedRows.Count, Status = "Failed",
-                    Payload = $"Target: {target}, 永久失败行(已留痕，不重试): {detail}",
+                    Payload = $"Target: {target}, 永久失败行(已转入异常池，不重试): {detail}",
                     ClientIp = ctx.Connection.RemoteIpAddress?.ToString(), Timestamp = DateTime.UtcNow,
                 });
             }
