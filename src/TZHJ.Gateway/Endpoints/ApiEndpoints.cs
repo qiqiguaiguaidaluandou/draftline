@@ -278,44 +278,54 @@ public static class ApiEndpoints
                 });
             }
 
-            // 失败留痕：整批失败或任一行失败都记 Failed 日志、不置 Done，返回各行结果供客户端重试。
+            // 瞬时整批失败（ShouldFailBatch 模拟，或下方 SubmitAsync 抛 HTTP/解析异常）→ 不置 Done，可重试。
             IReadOnlyList<SubmitRowResult> rowResults;
             if (sink.ShouldFailBatch())
             {
-                rowResults = req.Rows.Select(r => new SubmitRowResult { RowKey = r.RowKey, Success = false }).ToList();
+                db.ActivityLogs.Add(new ActivityLog
+                {
+                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
+                    ImpactCount = 0, Status = "Failed",
+                    Payload = $"Target: {target}, 整批回传失败（可重试）",
+                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(), Timestamp = DateTime.UtcNow,
+                });
+                await db.SaveChangesAsync(ct);
+                return Results.Json(new SubmitResult { Success = false, Message = $"回传 {target} 失败，批次未完成，可重试。" });
             }
-            else
+
+            try
             {
                 rowResults = await sink.SubmitAsync(req.Flow, empId, req.Rows, ct);
             }
-
-            var failedKeys = rowResults.Where(r => !r.Success).Select(r => r.RowKey).ToList();
-            if (failedKeys.Count > 0)
+            catch (Exception ex)
             {
                 db.ActivityLogs.Add(new ActivityLog
                 {
-                    Action = "Submit",
-                    EmployeeId = empId,
-                    Flow = req.Flow,
-                    GroupName = req.GroupName,
-                    BatchId = req.BatchKey,
-                    ImpactCount = rowResults.Count(r => r.Success),
-                    Status = "Failed",
-                    Payload = $"Target: {target}, FailedRows: {string.Join(",", failedKeys)}",
-                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(),
-                    Timestamp = DateTime.UtcNow
+                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
+                    ImpactCount = 0, Status = "Failed",
+                    Payload = $"Target: {target}, 回传调用失败（可重试）: {ex.Message}",
+                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(), Timestamp = DateTime.UtcNow,
                 });
                 await db.SaveChangesAsync(ct);
+                return Results.Json(new SubmitResult { Success = false, Message = $"回传 {target} 失败，批次未完成，可重试。" });
+            }
 
-                return Results.Json(new SubmitResult
+            // 逐行永久失败（如"物料编码不存在"）：单独留痕，但不阻断批次——成功行已回传、失败行重试也不会成功。
+            var failedRows = rowResults.Where(r => !r.Success).ToList();
+            if (failedRows.Count > 0)
+            {
+                var detail = string.Join("; ", failedRows.Select(r => $"{r.RowKey}({r.Message})"));
+                db.ActivityLogs.Add(new ActivityLog
                 {
-                    Success = false,
-                    RowResults = rowResults.ToList(),
-                    Message = $"回传 {target} 失败 {failedKeys.Count} 行，批次未完成，可重试。",
+                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
+                    ImpactCount = failedRows.Count, Status = "Failed",
+                    Payload = $"Target: {target}, 永久失败行(已留痕，不重试): {detail}",
+                    ClientIp = ctx.Connection.RemoteIpAddress?.ToString(), Timestamp = DateTime.UtcNow,
                 });
             }
 
-            // 成功：置 Done + 结构化审计（窗口起止 / AuditId 落独立列，供 audit/exists 精确查）。
+            // 批次完成：置 Done + 结构化审计（窗口起止 / AuditId 落独立列，供 audit/exists 精确查）。
+            var successCount = rowResults.Count(r => r.Success);
             var auditId = $"AUDIT-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}"[..36];
             registry.Status = BatchLocation.Done;
             registry.AuditId = auditId;
@@ -328,7 +338,7 @@ public static class ApiEndpoints
                 Flow = req.Flow,
                 GroupName = req.GroupName,
                 BatchId = req.BatchKey,
-                ImpactCount = req.Rows.Count,
+                ImpactCount = successCount,
                 Status = "Success",
                 WindowStart = req.WindowStart.ToUniversalTime(),
                 WindowEnd = req.WindowEnd.ToUniversalTime(),
@@ -345,7 +355,9 @@ public static class ApiEndpoints
                 Success = true,
                 AuditId = auditId,
                 RowResults = rowResults.ToList(),
-                Message = $"已回传 {req.Rows.Count} 行至 {target}。",
+                Message = failedRows.Count > 0
+                    ? $"已回传 {successCount} 行至 {target}；{failedRows.Count} 行失败已留痕（如物料不存在，不重试）。"
+                    : $"已回传 {req.Rows.Count} 行至 {target}。",
             });
         });
 

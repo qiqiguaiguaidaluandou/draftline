@@ -79,8 +79,16 @@ builder.Services.AddSingleton(ebsOptions);
 builder.Services.AddSingleton<EbsTokenProvider>();
 
 builder.Services.AddSingleton<FakeDataSource>();
-// 回传(SRM/EBS)仍由 FakeDataSource 顶替（路线图 B2，本期不涉及）。
-builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
+
+// 回传(路线图 B2)：Srm:Enabled=true 时核价价格走真实 SRM 接口(SrmSubmitSink)，
+// 挑图→EBS 回传接口未提供，那一支仍由 FakeDataSource 顶替（SrmSubmitSink 内部委托）。
+var srmOptions = new SrmOptions();
+builder.Configuration.GetSection("Srm").Bind(srmOptions);
+builder.Services.AddSingleton(srmOptions);
+if (srmOptions.Enabled)
+    builder.Services.AddHttpClient<ISubmitSink, SrmSubmitSink>();
+else
+    builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
 
 if (ebsOptions.Enabled)
 {

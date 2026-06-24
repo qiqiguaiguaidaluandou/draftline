@@ -225,12 +225,25 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
             // 成功：记一条操作日志（fire-and-forget，记录失败不影响回传）。
             OperationLog.Record(_opLog, SubmitButtonText, _batch.FolderName, _flow, _session.Operator.EmployeeId);
 
-            // 正常行→已上传；异常行入池；持久化后整批移入已处理。
-            foreach (var r in normal) r.MarkUploaded();
+            // 逐行结果：成功行→已上传；被目标系统永久退回的行（如“物料不存在”）→挂异常池，
+            // 与手动挂起的异常同等对待，可在“异常解决”页补回传（待主数据修正后重提）。
+            var failedReasons = result.RowResults
+                .Where(r => !r.Success)
+                .ToDictionary(r => r.RowKey, r => r.Message);
 
-            if (exceptions.Count > 0)
+            foreach (var r in normal)
             {
-                var items = exceptions.Select(r => new ExceptionItem
+                if (failedReasons.TryGetValue(r.RowKey, out var remark))
+                    r.Suspend($"{TargetSystem}回传失败：{remark ?? "未知原因"}");
+                else
+                    r.MarkUploaded();
+            }
+
+            // 手动挂起 + 目标系统退回，统一入异常池（按当前状态重新取，含上面新挂的）。
+            var exceptionRows = Rows.Where(r => r.Status == RowStatus.Exception).ToList();
+            if (exceptionRows.Count > 0)
+            {
+                var items = exceptionRows.Select(r => new ExceptionItem
                 {
                     Flow = _flow,
                     RowKey = r.RowKey,
@@ -246,7 +259,13 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
             await _store.SaveBatchAsync(_batch);
             await _store.MoveToDoneAsync(_batch);
 
-            _dialog.Success($"上传成功：{normal.Count} 行已回传 {TargetSystem}，批次已移入「已处理」。");
+            var uploadedCount = normal.Count - failedReasons.Count;
+            var rejectedCount = failedReasons.Count;
+            var msg = $"上传完成：{uploadedCount} 行已回传 {TargetSystem}";
+            if (rejectedCount > 0) msg += $"，{rejectedCount} 行被退回并转入异常池";
+            if (exceptions.Count > 0) msg += $"，{exceptions.Count} 行手动挂起";
+            msg += "。批次已移入「已处理」。";
+            _dialog.Success(msg);
             _nav.ToBatchList(_flow, BatchLocation.Todo);
         }
         catch (Exception ex)
