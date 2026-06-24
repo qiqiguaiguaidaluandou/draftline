@@ -8,13 +8,13 @@ namespace TZHJ.App.Services;
 /// <summary>
 /// 会话内取数调度（登录态触发的真正落地）。登录成功后 <see cref="Start"/>：
 ///   · 立即补一轮 = **登录补拉**（补离线期间已关闭的窗）；
-///   · 之后每 120s 轮询一次 = **会话内定时触发**（补在线期间新关闭的窗）。
+///   · 之后每 2 小时轮询一次 = **会话内定时触发**（兜底，正常靠操作员点"同步数据"按钮即时同步）。
 /// 两者与手动补拉共用 <see cref="BatchSyncService"/>；幂等故轮询安全。拉到新批次弹 Toast
 /// （列表刷新由 BatchListViewModel 的 FileSystemWatcher 负责）。覆盖操作员 AllowedFlows 的各流程。
 /// </summary>
 public sealed class SessionSyncScheduler
 {
-    private static readonly TimeSpan Interval = TimeSpan.FromSeconds(120);
+    private static readonly TimeSpan Interval = TimeSpan.FromHours(2);
 
     private readonly ISession _session;
     private readonly BatchSyncService _sync;
@@ -31,7 +31,7 @@ public sealed class SessionSyncScheduler
         _timer.Tick += async (_, _) => await RunPassAsync();
     }
 
-    /// <summary>登录成功后调用：立即补一轮（登录补拉）并开启 120s 轮询（会话内定时）。</summary>
+    /// <summary>登录成功后调用：立即补一轮（登录补拉）并开启 2 小时轮询（会话内定时兜底）。</summary>
     public void Start()
     {
         if (!_session.IsAuthenticated) return;
