@@ -113,13 +113,20 @@ public partial class BatchWorkView : UserControl
         };
     }
 
-    private static DataGridTextColumn ReadOnlyColumn(string header, string path, double width) => new()
+    private static DataGridTextColumn ReadOnlyColumn(string header, string path, double width)
     {
-        Header = header,
-        Binding = new Binding(path),
-        IsReadOnly = true,
-        Width = width,
-    };
+        var col = new DataGridTextColumn
+        {
+            Header = header,
+            Binding = new Binding(path),
+            IsReadOnly = true,
+            Width = width,
+        };
+        // 与列表/异常池一致：过长内容省略号截断，鼠标悬停显示完整文本（如异常原因）。
+        if (Application.Current?.TryFindResource("CellTextEllipsisToolTip") is Style ellipsis)
+            col.ElementStyle = ellipsis;
+        return col;
+    }
 
     /// <summary>操作列：非异常显示「挂起异常」，异常显示「撤销异常」（可见性由行状态驱动）。</summary>
     private static DataGridTemplateColumn BuildActionColumn()
