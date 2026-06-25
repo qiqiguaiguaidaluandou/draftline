@@ -85,6 +85,11 @@ public sealed class SubmitRequest
     public required DateTime WindowStart { get; init; }
     public required DateTime WindowEnd { get; init; }
     public List<SubmitRow> Rows { get; init; } = new();
+    /// <summary>
+    /// 异常行"重新回传"：true 时绕过批次幂等（批次早已 Done），强制重新调外部系统重推该行；
+    /// 失败行更新既有异常记录的原因（不新增重复），由调用方按行级结果决定去留。
+    /// </summary>
+    public bool IsExceptionRetry { get; init; }
 }
 
 public sealed class SubmitRowResult

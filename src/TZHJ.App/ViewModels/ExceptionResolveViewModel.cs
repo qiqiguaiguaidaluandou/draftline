@@ -166,12 +166,25 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
                 {
                     new() { RowKey = Row.RowKey, Values = new Dictionary<string, string?>(Row.Model.Values) },
                 },
+                IsExceptionRetry = true, // 绕过批次幂等，强制重新推该行；失败行由后端更新异常原因。
             };
 
             var result = await _submit.SubmitBatchAsync(request);
             if (!result.Success)
             {
+                // 批次级失败（HTTP/解析异常等，可重试）。
                 _dialog.Error(result.Message ?? "回传失败，请重试。");
+                return;
+            }
+
+            // 行级判定：批次级成功 ≠ 该行成功。该行在外部系统失败（如"物料编码不存在"）→
+            // 保留异常、不标已上传、不移出异常池，提示用户（后端已更新异常原因）。
+            var rowResult = result.RowResults.FirstOrDefault(r => r.RowKey == Row.RowKey);
+            if (rowResult is null || !rowResult.Success)
+            {
+                _dialog.Error(string.IsNullOrWhiteSpace(rowResult?.Message)
+                    ? $"重新回传 {TargetSystem} 未成功，该行仍保留在「异常待跟进」。"
+                    : $"重新回传 {TargetSystem} 失败：{rowResult!.Message}\n该行仍保留在「异常待跟进」。");
                 return;
             }
 

@@ -269,7 +269,8 @@ public static class ApiEndpoints
             if (registry == null) return Results.NotFound(new { message = "云端找不到批次记录。" });
 
             // 幂等：已提交过的批次不再回传外部系统，直接回显既有 AuditId（防网络重发 / 重复点提交）。
-            if (registry.Status == BatchLocation.Done)
+            // 例外：异常行"重新回传"显式绕过——批次虽已 Done，但失败行需要真正重推外部系统。
+            if (registry.Status == BatchLocation.Done && !req.IsExceptionRetry)
             {
                 return Results.Json(new SubmitResult
                 {
@@ -320,6 +321,21 @@ public static class ApiEndpoints
                 foreach (var fr in failedRows)
                 {
                     rowByKey.TryGetValue(fr.RowKey, out var src);
+
+                    // 重传场景：该行的异常记录已存在，更新原因即可，避免重复入池。
+                    var existing = req.IsExceptionRetry
+                        ? await db.Exceptions.FirstOrDefaultAsync(
+                            e => e.Flow == req.Flow && e.SourceBatch == req.BatchKey
+                                 && e.RowKey == fr.RowKey && e.GroupName == req.GroupName
+                                 && e.Status == RowStatus.Exception, ct)
+                        : null;
+                    if (existing != null)
+                    {
+                        existing.Reason = $"{target}回传失败：{fr.Message}";
+                        existing.SuspendedAt = DateTime.UtcNow;
+                        continue;
+                    }
+
                     db.Exceptions.Add(new ExceptionEntity
                     {
                         GroupName = req.GroupName,
