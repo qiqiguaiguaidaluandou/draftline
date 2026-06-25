@@ -46,9 +46,9 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
             Items.Clear();
             var list = await _store.ListExceptionsAsync(_flow, _session.Operator.EmployeeId);
             
-            // 挑图统一用 Center、不分产品线组 → 永不显示该列；核价仅在存在多个组名时显示（权限感应）。
-            ShowGroupColumn = _flow == FlowType.Pricing
-                && list.Select(e => e.GroupName).Distinct().Count() > 1;
+            // 核价恒显示产品线组列：即便当前只有一个组，也需标明是组1还是组2，否则无法区分数据归属。
+            // 挑图统一用 Center、不分组 → 永不显示该列。
+            ShowGroupColumn = _flow == FlowType.Pricing;
 
             foreach (var item in list)
                 Items.Add(item);

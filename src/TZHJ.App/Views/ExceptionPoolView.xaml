@@ -4,6 +4,10 @@
              xmlns:fi="clr-namespace:FluentIcons.Wpf;assembly=FluentIcons.Wpf"
              xmlns:b="clr-namespace:TZHJ.App.Behaviors"
              FontFamily="Microsoft YaHei" FontSize="13">
+  <UserControl.Resources>
+    <!-- DataGridColumn 不在可视化树中，列的 Visibility 绑定需经代理访问 ViewModel。 -->
+    <b:BindingProxy x:Key="VmProxy" Data="{Binding}" />
+  </UserControl.Resources>
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
@@ -39,7 +43,7 @@
         <DataGrid.Columns>
           <DataGridTextColumn Header="产品线组" Binding="{Binding GroupName}" Width="100"
                               ElementStyle="{StaticResource CellTextEllipsisToolTip}"
-                              Visibility="{Binding DataContext.ShowGroupColumn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+                              Visibility="{Binding Data.ShowGroupColumn, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVis}}" />
           <DataGridTextColumn Header="物料编码" Binding="{Binding MaterialCode}" Width="120" />
           <DataGridTextColumn Header="名称" Binding="{Binding DisplayName}" Width="*" />
           <DataGridTextColumn Header="来源批次" Binding="{Binding SourceBatch}" Width="240" />

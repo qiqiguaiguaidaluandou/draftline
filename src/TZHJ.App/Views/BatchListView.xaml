@@ -4,6 +4,10 @@
              xmlns:fi="clr-namespace:FluentIcons.Wpf;assembly=FluentIcons.Wpf"
              xmlns:b="clr-namespace:TZHJ.App.Behaviors"
              FontFamily="Microsoft YaHei" FontSize="13">
+  <UserControl.Resources>
+    <!-- DataGridColumn 不在可视化树中，列的 Visibility 绑定需经代理访问 ViewModel。 -->
+    <b:BindingProxy x:Key="VmProxy" Data="{Binding}" />
+  </UserControl.Resources>
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
@@ -49,7 +53,7 @@
         <!-- 全部列固定宽度：每列按内容给足，谁都不会被挤压；总宽超出窗口时由 DataGrid 出横向滚动条。不用弹性 * -->
         <DataGridTextColumn Header="产品线组" Binding="{Binding GroupName}" Width="100"
                             ElementStyle="{StaticResource CellTextEllipsisToolTip}"
-                            Visibility="{Binding DataContext.ShowGroupColumn, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVis}}" />
+                            Visibility="{Binding Data.ShowGroupColumn, Source={StaticResource VmProxy}, Converter={StaticResource BoolToVis}}" />
         <DataGridTextColumn Header="批次（取数时间范围）" Binding="{Binding WindowText}" Width="240" />
         <!-- 文件夹名做成可点链接：点它=点"打开表单"，进入表单作业界面 -->
         <DataGridTemplateColumn Header="本地文件夹" Width="250">
