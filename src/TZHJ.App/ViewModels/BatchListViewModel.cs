@@ -67,8 +67,9 @@ public sealed partial class BatchListViewModel : ViewModelBase
             Batches.Clear();
             var list = await _store.ListBatchesAsync(_flow, _session.Operator.EmployeeId, _location);
             
-            // 权限感应：如果列表中存在超过一个不同的组名，则显示组列
-            ShowGroupColumn = list.Select(b => b.GroupName).Distinct().Count() > 1;
+            // 挑图统一用 Center、不分产品线组 → 永不显示该列；核价仅在存在多个组名时显示（权限感应）。
+            ShowGroupColumn = _flow == FlowType.Pricing
+                && list.Select(b => b.GroupName).Distinct().Count() > 1;
 
             foreach (var b in list)
                 Batches.Add(new BatchRowVM(b));

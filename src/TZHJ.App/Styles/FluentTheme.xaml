@@ -357,6 +357,18 @@
     </Style.Triggers>
   </Style>
 
+  <!-- 列内容过长时以省略号截断，鼠标悬停显示完整文本（用于 GroupName、Reason 等长名称列）。
+       ToolTip 绑自身 Text，故一套样式可复用于任意文本列；文本为空时禁用 ToolTip，避免空气泡。 -->
+  <Style x:Key="CellTextEllipsisToolTip" TargetType="TextBlock">
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    <Setter Property="ToolTip" Value="{Binding RelativeSource={RelativeSource Self}, Path=Text}" />
+    <Style.Triggers>
+      <Trigger Property="Text" Value="">
+        <Setter Property="ToolTipService.IsEnabled" Value="False" />
+      </Trigger>
+    </Style.Triggers>
+  </Style>
+
   <!-- ============ 卡片 / 信息条 ============ -->
   <Style x:Key="Card" TargetType="Border">
     <Setter Property="Background" Value="{StaticResource PanelBg}" />
