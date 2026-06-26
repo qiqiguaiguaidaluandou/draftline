@@ -38,7 +38,7 @@ public static class FieldSchemas
         public const string Applicant = "applicant";       // 申请人名称
         public const string Remark = "remark";             // 备注
         public const string HasChange = "hasChange";       // 是否存在变更（PLM）
-        public const string CanMachine = "canMachine";     // 是否机加中心可以做（手填、是/否、必填）
+        public const string CanMachine = "canMachine";     // 是否机加中心可以做（手填、H06/否、必填）
     }
 
     /// <summary>核价表单字段：物料编码/型号/名称/物料描述/需求数量(EBS) + 当前是否存在变更(PLM) + 目标价(手填、必填)。</summary>
@@ -53,7 +53,7 @@ public static class FieldSchemas
         new FieldDefinition { Key = PricingKeys.TargetPrice,  DisplayName = "目标价",   Source = FieldSource.Manual, Editor = FieldEditor.Number, IsRequired = true, Order = 7 },
     };
 
-    /// <summary>挑图表单字段：13 个 EBS 只读 + 是否存在变更(PLM) + 是否机加中心可以做(手填、是/否、必填)。</summary>
+    /// <summary>挑图表单字段：13 个 EBS 只读 + 是否存在变更(PLM) + 是否机加中心可以做(手填、H06/否、必填)。</summary>
     public static IReadOnlyList<FieldDefinition> DrawingSelection { get; } = new[]
     {
         new FieldDefinition { Key = DrawingKeys.EbsId,        DisplayName = "EBS-ID",   Source = FieldSource.Ebs, Order = 1, IsRowKey = true },
@@ -71,7 +71,7 @@ public static class FieldSchemas
         new FieldDefinition { Key = DrawingKeys.Applicant,    DisplayName = "申请人名称", Source = FieldSource.Ebs, Order = 13 },
         new FieldDefinition { Key = DrawingKeys.Remark,       DisplayName = "备注",     Source = FieldSource.Ebs, Order = 14 },
         new FieldDefinition { Key = DrawingKeys.HasChange,    DisplayName = "是否存在变更", Source = FieldSource.Plm, Order = 15 },
-        new FieldDefinition { Key = DrawingKeys.CanMachine,   DisplayName = "是否机加中心可以做", Source = FieldSource.Manual, Editor = FieldEditor.Dropdown, Options = new[] { "是", "否" }, IsRequired = true, Order = 16 },
+        new FieldDefinition { Key = DrawingKeys.CanMachine,   DisplayName = "是否机加中心可以做", Source = FieldSource.Manual, Editor = FieldEditor.Dropdown, Options = new[] { "H06", "否" }, IsRequired = true, Order = 16 },
     };
 
     public static IReadOnlyList<FieldDefinition> For(FlowType flow) =>

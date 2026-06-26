@@ -12,6 +12,6 @@ public enum FieldEditor
     /// <summary>数值输入（如核价目标价）。</summary>
     Number,
 
-    /// <summary>下拉枚举（如挑图"是否机加中心可以做"：是 / 否）。</summary>
+    /// <summary>下拉枚举（如挑图"是否机加中心可以做"：H06 / 否）。</summary>
     Dropdown,
 }

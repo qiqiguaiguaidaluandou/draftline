@@ -126,7 +126,7 @@ public sealed class FakeDataSource : IEbsPlmSource, ISubmitSink
             [FieldSchemas.DrawingKeys.Applicant] = Pick(rng, Applicants),
             [FieldSchemas.DrawingKeys.Remark] = rng.Next(4) == 0 ? "加急" : "",
             [FieldSchemas.DrawingKeys.HasChange] = Pick(rng, ChangeStates),
-            [FieldSchemas.DrawingKeys.CanMachine] = null, // 待填列：操作员手填（是/否）
+            [FieldSchemas.DrawingKeys.CanMachine] = null, // 待填列：操作员手填（H06/否）
         };
 
         return new SourceRow { RowKey = ebsId, Values = values, Drawings = BuildDrawings(rng, code, name) };
