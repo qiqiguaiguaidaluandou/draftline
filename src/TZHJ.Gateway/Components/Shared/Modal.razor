@@ -1,0 +1,37 @@
+@* 通用弹窗外壳：标题 + 内容(ChildContent) + 底部操作(Footer) + 关闭。
+   可见性用 @@bind-Visible 双向绑定；点遮罩/✕/Esc 关闭。表单类弹窗用此外壳。
+   用法：
+     <Modal @@bind-Visible="_show" Title="新建用户" Width="560px">
+         <ChildContent> …表单字段… </ChildContent>
+         <Footer> <button @@onclick="Save">创建</button> </Footer>
+     </Modal> *@
+
+@if (Visible)
+{
+    <div class="modal-overlay" @onclick="OnBackdrop">
+        <div class="modal-card card" style="@($"width:{Width};")" @onclick:stopPropagation="true">
+            <div class="modal-head">
+                <h2>@Title</h2>
+                <button class="modal-x" type="button" aria-label="关闭" @onclick="Close">✕</button>
+            </div>
+            @ChildContent
+            @if (Footer is not null)
+            {
+                <div class="modal-actions" style="margin-top:20px;">@Footer</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Width { get; set; } = "520px";
+    [Parameter] public bool CloseOnBackdrop { get; set; } = true;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public RenderFragment? Footer { get; set; }
+
+    private Task Close() => VisibleChanged.InvokeAsync(false);
+    private Task OnBackdrop() => CloseOnBackdrop ? Close() : Task.CompletedTask;
+}

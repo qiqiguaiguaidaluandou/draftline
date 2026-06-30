@@ -3,62 +3,16 @@
 @rendermode InteractiveServer
 @inject IServiceScopeFactory ScopeFactory
 
-<h1>角色管理</h1>
+<div class="page-head">
+    <h1>角色管理</h1>
+    <button @onclick="OpenCreate">+ 新建角色</button>
+</div>
 <p class="muted">角色 = 一组“流程 + 组”数据范围的捆绑。给用户挂角色即授予可见数据；组 <code>*</code> 表示该流程全部组。</p>
 
 @if (_msg is not null)
 {
     <div class="msg @(_ok ? "ok" : "err")">@_msg</div>
 }
-
-<div class="card">
-    <h2>@(_editId is null ? "新建角色" : $"编辑角色 #{_editId}")</h2>
-    <div class="row">
-        <div><label>角色名</label><input @bind="_name" placeholder="如：核价员-组1" /></div>
-        <div><label>描述（可选）</label><input @bind="_desc" /></div>
-    </div>
-
-    <label>数据范围</label>
-    @if (_ranges.Count == 0) { <div class="muted">尚未添加范围。</div> }
-    <div style="margin:6px 0;">
-        @foreach (var r in _ranges)
-        {
-            <span class="pill tag">
-                @FlowText(r.Flow) / @r.GroupName
-                <a href="javascript:void(0)" @onclick="() => RemoveRange(r)" style="margin-left:6px;">✕</a>
-            </span>
-        }
-    </div>
-
-    <div class="row" style="align-items:flex-end;">
-        <div style="max-width:160px;">
-            <label>流程</label>
-            <select @bind="_addFlow">
-                <option value="@FlowType.Pricing">核价（→SRM）</option>
-                <option value="@FlowType.DrawingSelection">挑图（→EBS）</option>
-            </select>
-        </div>
-        <div style="max-width:200px;">
-            <label>组</label>
-            <select @bind="_addGroup">
-                <option value="*">* （全部组）</option>
-                @foreach (var g in GroupsFor(_addFlow))
-                {
-                    <option value="@g">@g</option>
-                }
-            </select>
-        </div>
-        <div style="flex:0 0 auto;"><button class="ghost" @onclick="AddRange">添加范围</button></div>
-    </div>
-
-    <div style="margin-top:16px;">
-        <button disabled="@_busy" @onclick="Save">@(_editId is null ? "创建角色" : "保存修改")</button>
-        @if (_editId is not null)
-        {
-            <button class="ghost" @onclick="ResetForm">取消编辑</button>
-        }
-    </div>
-</div>
 
 <div class="card">
     <h2>角色列表（@_roles.Count）</h2>
@@ -85,11 +39,63 @@
     </table>
 </div>
 
+<Modal Visible="_showForm" VisibleChanged="OnFormVisibleChanged"
+       Title="@(_editId is null ? "新建角色" : $"编辑角色 #{_editId}")" Width="560px">
+    <ChildContent>
+        @if (_msg is not null && !_ok)
+        {
+            <div class="msg err">@_msg</div>
+        }
+        <div class="row">
+            <div><label>角色名</label><input @bind="_name" placeholder="如：核价员-组1" /></div>
+            <div><label>描述（可选）</label><input @bind="_desc" /></div>
+        </div>
+
+        <label>数据范围</label>
+        @if (_ranges.Count == 0) { <div class="muted">尚未添加范围。</div> }
+        <div style="margin:6px 0;">
+            @foreach (var r in _ranges)
+            {
+                <span class="pill tag">
+                    @FlowText(r.Flow) / @r.GroupName
+                    <a href="javascript:void(0)" @onclick="() => RemoveRange(r)" style="margin-left:6px;">✕</a>
+                </span>
+            }
+        </div>
+
+        <div class="row" style="align-items:flex-end;">
+            <div style="max-width:160px;">
+                <label>流程</label>
+                <select @bind="_addFlow">
+                    <option value="@FlowType.Pricing">核价（→SRM）</option>
+                    <option value="@FlowType.DrawingSelection">挑图（→EBS）</option>
+                </select>
+            </div>
+            <div style="max-width:200px;">
+                <label>组</label>
+                <select @bind="_addGroup">
+                    <option value="*">* （全部组）</option>
+                    @foreach (var g in GroupsFor(_addFlow))
+                    {
+                        <option value="@g">@g</option>
+                    }
+                </select>
+            </div>
+            <div style="flex:0 0 auto;"><button class="ghost" @onclick="AddRange">添加范围</button></div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="ghost" @onclick="CloseForm">取消</button>
+        <button disabled="@_busy" @onclick="Save">@(_editId is null ? "创建角色" : "保存修改")</button>
+    </Footer>
+</Modal>
+
 <ConfirmDialog @ref="_confirm" />
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private ConfirmDialog? _confirm;
+    private bool _showForm;
 
     private List<RoleSummary> _roles = new();
     private List<GroupOption> _groups = new();
@@ -139,13 +145,35 @@
 
     private void RemoveRange(PermissionDto r) => _ranges.Remove(r);
 
+    private void OpenCreate()
+    {
+        ResetForm();
+        _msg = null;
+        _showForm = true;
+    }
+
     private void Edit(RoleSummary r)
     {
         _editId = r.Id;
         _name = r.Name;
         _desc = r.Description ?? "";
         _ranges = r.Permissions.Select(p => new PermissionDto { Flow = p.Flow, GroupName = p.GroupName }).ToList();
+        _addFlow = FlowType.Pricing;
+        _addGroup = "*";
         _msg = null;
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+        ResetForm();
+    }
+
+    private void OnFormVisibleChanged(bool v)
+    {
+        if (v) _showForm = true;
+        else CloseForm();
     }
 
     private void ResetForm()
@@ -174,7 +202,7 @@
                 ? await svc.CreateRoleAsync(req, _actor, null)
                 : await svc.UpdateRoleAsync(_editId.Value, req, _actor, null);
             Show(r);
-            if (r.Success) ResetForm();
+            if (r.Success) CloseForm();   // 成功才关弹窗；失败保留输入并在弹窗内提示
             await Reload();
         }
         finally { _busy = false; }

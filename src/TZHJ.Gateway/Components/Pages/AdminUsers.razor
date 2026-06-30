@@ -3,31 +3,15 @@
 @rendermode InteractiveServer
 @inject IServiceScopeFactory ScopeFactory
 
-<h1>用户管理</h1>
+<div class="page-head">
+    <h1>用户管理</h1>
+    <button @onclick="OpenCreate">+ 新建用户</button>
+</div>
 
 @if (_msg is not null)
 {
     <div class="msg @(_ok ? "ok" : "err")">@_msg</div>
 }
-
-<div class="card">
-    <h2>新建用户</h2>
-    <div class="row">
-        <div><label>工号</label><input @bind="_newEmpId" /></div>
-        <div><label>姓名</label><input @bind="_newName" /></div>
-        <div><label>部门</label><input @bind="_newDept" /></div>
-        <div><label>岗位</label><input @bind="_newPos" /></div>
-    </div>
-    <div class="row">
-        <div><label>初始密码（≥8位，首登强制改）</label><input @bind="_newPwd" /></div>
-        <div style="flex:0 0 auto; align-self:flex-end;">
-            <label><input type="checkbox" @bind="_newIsAdmin" /> 设为管理员</label>
-        </div>
-        <div style="flex:0 0 auto; align-self:flex-end;">
-            <button disabled="@_busy" @onclick="CreateUser">创建</button>
-        </div>
-    </div>
-</div>
 
 <div class="card">
     <h2>用户列表（@_users.Count）</h2>
@@ -107,11 +91,39 @@
     </table>
 </div>
 
+<Modal @bind-Visible="_showCreate" Title="新建用户" Width="560px">
+    <ChildContent>
+        @if (_msg is not null && !_ok)
+        {
+            <div class="msg err">@_msg</div>
+        }
+        <div class="row">
+            <div><label>工号</label><input @bind="_newEmpId" /></div>
+            <div><label>姓名</label><input @bind="_newName" /></div>
+        </div>
+        <div class="row">
+            <div><label>部门</label><input @bind="_newDept" /></div>
+            <div><label>岗位</label><input @bind="_newPos" /></div>
+        </div>
+        <div class="row" style="align-items:flex-end;">
+            <div><label>初始密码（≥8位，首登强制改）</label><input @bind="_newPwd" /></div>
+            <div style="flex:0 0 auto; align-self:flex-end; padding-bottom:3px;">
+                <label style="margin:0;"><input type="checkbox" @bind="_newIsAdmin" /> 设为管理员</label>
+            </div>
+        </div>
+    </ChildContent>
+    <Footer>
+        <button class="ghost" @onclick="() => _showCreate = false">取消</button>
+        <button disabled="@_busy" @onclick="CreateUser">创建</button>
+    </Footer>
+</Modal>
+
 <ConfirmDialog @ref="_confirm" />
 
 @code {
     [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
     private ConfirmDialog? _confirm;
+    private bool _showCreate;
 
     private List<UserSummary> _users = new();
     private List<RoleSummary> _roles = new();
@@ -150,6 +162,14 @@
 
     private void Show(ApiResult r) { _ok = r.Success; _msg = r.Message; }
 
+    private void OpenCreate()
+    {
+        _newEmpId = _newName = _newDept = _newPos = _newPwd = "";
+        _newIsAdmin = false;
+        _msg = null;
+        _showCreate = true;
+    }
+
     private async Task CreateUser()
     {
         _busy = true;
@@ -169,6 +189,7 @@
             Show(r);
             if (r.Success)
             {
+                _showCreate = false;   // 成功才关弹窗；失败保留输入并在弹窗内提示
                 _newEmpId = _newName = _newDept = _newPos = _newPwd = "";
                 _newIsAdmin = false;
             }
