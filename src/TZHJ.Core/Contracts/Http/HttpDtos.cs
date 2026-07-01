@@ -213,6 +213,13 @@ public sealed class OperationLogEntry
     /// 查询返回时为该条所属工号。
     /// </summary>
     public string? EmployeeId { get; init; }
+
+    /// <summary>操作结果（"成功"/"失败"）。仅 /oplog/mine 查询返回时填充；上报时留空。</summary>
+    public string? Result { get; init; }
+
+    /// <summary>流程中文名，供 App 直接绑定显示（不入库、不上报）。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string FlowLabel => Flow == FlowType.Pricing ? "核价" : "挑图";
 }
 
 /// <summary>本人操作日志查询响应（GET /api/oplog/mine）。</summary>

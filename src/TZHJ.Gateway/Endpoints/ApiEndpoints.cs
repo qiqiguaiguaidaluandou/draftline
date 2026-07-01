@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using TZHJ.Core.Contracts;
 using TZHJ.Core.Contracts.Http;
 using TZHJ.Core.Enums;
+using TZHJ.Core.Logging;
 using TZHJ.Core.Models;
 using TZHJ.Core.Schemas;
 using TZHJ.Gateway.AntiCorruption;
@@ -448,25 +449,47 @@ public static class ApiEndpoints
             });
         });
 
-        // 用户操作日志：查本人记录（从统一 ActivityLogs 捞动作）
+        // 用户操作日志：客户端上报本人行为（工号以令牌为准，防伪造）。
+        // 此前缺失该端点，客户端 fire-and-forget 上报被静默丢弃——此处补上。
+        api.MapPost("/oplog", (OperationLogEntry req, HttpContext ctx, IOperationLogStore store) =>
+        {
+            var empId = ctx.GetEmployeeId();
+            store.Append(new OperationLogEntry
+            {
+                Operation = req.Operation,
+                FormName = req.FormName,
+                OperatedAt = req.OperatedAt,
+                Flow = req.Flow,
+                ClientIp = req.ClientIp ?? Ip(ctx), // 优先客户端本机局域网 IP，缺失则回退连接 IP
+                EmployeeId = empId,                 // 以令牌盖章，忽略请求体工号
+            });
+            return Results.Ok();
+        });
+
+        // 用户操作日志：查本人记录（操作员视角——只看本人的业务操作 + 登录/改密，
+        // 精简友好：中文动作名 + 结果，隐藏 IP 和内部技术 payload。全量审计走后台 /api/admin/logs）。
         api.MapGet("/oplog/mine", async (HttpContext ctx, TzhjDbContext db, CancellationToken ct) =>
         {
             var empId = ctx.GetEmployeeId();
-            var logs = await db.ActivityLogs
-                .Where(x => x.EmployeeId == empId)
+            var visible = LogText.OperatorActions;
+            var rows = await db.ActivityLogs
+                .Where(x => x.EmployeeId == empId && visible.Contains(x.Action))
                 .OrderByDescending(x => x.Timestamp)
-                .Select(x => new OperationLogEntry
-                {
-                    EmployeeId = x.EmployeeId,
-                    Operation = x.Action + (x.Payload != null ? ": " + x.Payload : ""),
-                    FormName = x.BatchId ?? "",
-                    Flow = x.Flow ?? FlowType.Pricing,
-                    ClientIp = x.ClientIp,
-                    OperatedAt = DateTime.SpecifyKind(x.Timestamp, DateTimeKind.Utc).ToLocalTime(),
-                })
+                .Select(x => new { x.Action, x.Status, x.Flow, x.BatchId, x.Timestamp })
                 .ToListAsync(ct);
 
-            return Results.Json(new OperationLogListResponse { Items = logs });
+            var items = rows.Select(r => new OperationLogEntry
+            {
+                EmployeeId = empId,
+                Operation = LogText.ActionLabel(r.Action),
+                FormName = r.BatchId ?? "",
+                Flow = r.Flow ?? FlowType.Pricing,
+                Result = r.Status == "Failed" ? "失败" : "成功",
+                OperatedAt = DateTime.SpecifyKind(r.Timestamp, DateTimeKind.Utc).ToLocalTime(),
+                // ClientIp 不返回：操作员视图精简，不展示 IP
+            }).ToList();
+
+            return Results.Json(new OperationLogListResponse { Items = items });
         });
 
         // 登录补拉判据：按结构化窗口列精确查成功回传记录（009，取代 Payload 文本匹配）

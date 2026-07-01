@@ -16,7 +16,7 @@
     </Border>
 
     <DockPanel Grid.Row="1" Margin="24,14,24,8" LastChildFill="False">
-      <TextBlock DockPanel.Dock="Left" Text="仅显示本人操作记录（回传 / 补回传）。" Foreground="{StaticResource TextMuted}"
+      <TextBlock DockPanel.Dock="Left" Text="仅显示本人操作记录（提交回传、修改数据行、处理/挂起异常、重新取图、登录等）。" Foreground="{StaticResource TextMuted}"
                  VerticalAlignment="Center" Margin="0,0,10,0" />
       <Button DockPanel.Dock="Right" Command="{Binding RefreshCommand}">
         <StackPanel Orientation="Horizontal">
@@ -32,9 +32,10 @@
       <DataGrid b:CornerClip.Radius="10" BorderThickness="0" ItemsSource="{Binding Items}" IsReadOnly="True">
         <DataGrid.Columns>
           <DataGridTextColumn Header="时间" Binding="{Binding OperatedAt, StringFormat=yyyy-MM-dd HH:mm:ss}" Width="160" />
-          <DataGridTextColumn Header="操作按钮" Binding="{Binding Operation}" Width="160" />
+          <DataGridTextColumn Header="操作" Binding="{Binding Operation}" Width="140" />
+          <DataGridTextColumn Header="流程" Binding="{Binding FlowLabel}" Width="80" />
           <DataGridTextColumn Header="表单名称" Binding="{Binding FormName}" Width="*" />
-          <DataGridTextColumn Header="操作电脑IP" Binding="{Binding ClientIp}" Width="140" />
+          <DataGridTextColumn Header="结果" Binding="{Binding Result}" Width="80" />
         </DataGrid.Columns>
       </DataGrid>
     </Border>
