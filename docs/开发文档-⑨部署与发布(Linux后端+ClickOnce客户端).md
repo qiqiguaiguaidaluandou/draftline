@@ -140,9 +140,33 @@ publish\
 
 ---
 
-## 4. Linux 分发点（nginx 发静态文件）
+## 4. Linux 分发点
 
-把 Windows 出的 `publish\` **整个目录原样上传**到 Linux（如 `/var/www/tzhj/`），nginx 当静态文件发。**关键是 MIME 类型**，否则客户端认不出清单。
+有两种方式，**推荐方式 A（后端自托管，免 nginx）**。
+
+### 方式 A：后端 Gateway 直接托管（推荐）
+
+后端已内置 ClickOnce 静态文件托管（`src/TZHJ.Gateway/ClickOnce/`，对应 `changes/021`），并配好了
+`.application` / `.manifest` / `.deploy` 的 MIME。**无需装 nginx**：
+
+1. 把 Windows 出的 `publish\` **整个目录**拷进后端的分发目录（默认 `{后端目录}/clickonce/`，即
+   `/opt/tzhj-gateway/clickonce/`）。
+2. 客户端即可从 **`http(s)://<后端host>/tzhj/setup.exe`** 安装与自动更新——和 API 同一 host/端口/域名。
+
+路径可在 `appsettings.local.json` 覆盖：
+
+```json
+"ClickOnce": { "DistPath": "clickonce", "RequestPath": "/tzhj" }
+```
+
+- 测试机：客户端从 `http://IP:端口/tzhj/` 装；`pubxml` 的 `InstallUrl` 也填这个。
+- 生产：基础设施把域名转发到后端端口后，URL 换成 `https://域名/tzhj/`（`InstallUrl` 烤进清单，故换环境要重出包）。
+
+> 上传：`scp -r publish/* user@server:/opt/tzhj-gateway/clickonce/`。目录不存在后端会自动建。
+
+### 方式 B：nginx 单独发（仅当不想让后端托管时）
+
+把 `publish\` 上传到 `/var/www/tzhj/`，nginx 当静态文件发。**关键是 MIME 类型**，否则客户端认不出清单。
 
 ```nginx
 server {
@@ -171,7 +195,7 @@ server {
 }
 ```
 
-上传可用 `scp -r publish/* user@server:/var/www/tzhj/` 或 CI 自动推送（见 §6）。
+上传可用 `scp -r publish/* user@server:/var/www/tzhj/` 或 CI 自动推送（见 §6）。方式 B 需自备域名转发/TLS 时才用；一般选方式 A。
 
 ---
 
@@ -200,7 +224,7 @@ server {
 | 你改了 | 操作 |
 |---|---|
 | **后端** | Linux 上重新 `dotnet publish` Gateway → `sudo systemctl restart tzhj-gateway`。**客户端不用动**，全员即时生效 |
-| **客户端**（或 Core/Infra 里客户端用到的部分） | ① Windows 上 `ApplicationVersion` +1 → ② `dotnet publish` ClickOnce → ③ 新 `publish\` 覆盖上传到 `/var/www/tzhj/`。用户下次启动自动更新 |
+| **客户端**（或 Core/Infra 里客户端用到的部分） | ① Windows 上 `ApplicationVersion` +1 → ② `dotnet publish` ClickOnce → ③ 新 `publish\` 覆盖上传到后端 `clickonce/`（方式 A）或 `/var/www/tzhj/`（方式 B）。用户下次启动自动更新 |
 | **共享库 Core/Infrastructure** | 影响客户端 → 重发 ClickOnce；影响后端 → 重部署后端；两边都用到 → 两边各做一次 |
 
 ---

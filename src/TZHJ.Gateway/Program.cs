@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using TZHJ.Core.Contracts;
 using TZHJ.Gateway.AntiCorruption;
 using TZHJ.Gateway.Auth;
+using TZHJ.Gateway.ClickOnce;
 using TZHJ.Gateway.Components;
 using TZHJ.Gateway.Endpoints;
 using TZHJ.Gateway.Stores;
@@ -33,6 +34,11 @@ builder.Services.AddSingleton(configOptions);
 var storageOptions = new ServerStorageOptions();
 builder.Configuration.GetSection("Storage").Bind(storageOptions);
 builder.Services.AddSingleton(storageOptions);
+
+// 客户端 ClickOnce 发布物托管（后端即分发点，免装 nginx）。
+var clickOnceOptions = new ClickOnceOptions();
+builder.Configuration.GetSection("ClickOnce").Bind(clickOnceOptions);
+builder.Services.AddSingleton(clickOnceOptions);
 
 // ---------- 认证/授权（本地凭证，管理员维护） ----------
 var jwtOptions = new JwtOptions();
@@ -108,6 +114,7 @@ var app = builder.Build();
 await SeedBootstrapAdminAsync(app);
 
 app.UseStaticFiles();
+app.UseClickOnceDistribution(clickOnceOptions);   // 客户端安装/更新包，公开可下（鉴权之前）
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();

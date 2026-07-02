@@ -18,6 +18,9 @@ appsettings.local.json
 /TZHJ_Data/
 TZHJ_Data/
 
+## 客户端 ClickOnce 发布物（部署时拷入，非源码）
+clickonce/
+
 ## OS
 .DS_Store
 Thumbs.db
