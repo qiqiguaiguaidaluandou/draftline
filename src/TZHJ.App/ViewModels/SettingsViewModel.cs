@@ -11,11 +11,13 @@ public sealed partial class SettingsViewModel : ViewModelBase
 {
     private readonly IExplorerService _explorer;
     private readonly IDialogService _dialog;
+    private readonly IUpdateService _update;
 
-    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog)
+    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog, IUpdateService update)
     {
         _explorer = explorer;
         _dialog = dialog;
+        _update = update;
 
         Title = "设置";
         var op = session.Operator;
@@ -34,5 +36,36 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private void OpenRoot() => _explorer.OpenFolder(LocalRoot);
 
     [RelayCommand]
-    private void CheckUpdate() => _dialog.Info("ClickOnce 检查更新（骨架占位，发布后启用）。");
+    private void CheckUpdate()
+    {
+        var s = _update.GetStatus();
+        var current = s.CurrentVersion?.ToString() ?? Version;
+
+        // 开发 / 独立运行（未经 ClickOnce 部署）：无更新通道。
+        if (!s.IsDeployed)
+        {
+            _dialog.Info("当前为开发 / 独立运行版本，未经 ClickOnce 部署，无法检查更新。");
+            return;
+        }
+
+        // 本次启动刚由前台更新装上新版：直接告知结果。
+        if (s.UpdatedVersion is { } updated && updated != s.CurrentVersion)
+        {
+            _dialog.Success($"已更新至 v{updated}。");
+            return;
+        }
+
+        // 更新在每次启动时自动检查并应用（Foreground）；此处通过重启触发一次检查。
+        if (!s.CanRestart)
+        {
+            _dialog.Info($"当前版本 v{current}。更新在程序启动时自动检查并应用，请手动重启程序以获取最新版本。");
+            return;
+        }
+
+        if (_dialog.Confirm("检查更新",
+                $"当前版本 v{current}。\n更新在程序启动时自动检查并应用。\n是否立即重启以获取最新版本？"))
+        {
+            _update.RestartForUpdate();
+        }
+    }
 }

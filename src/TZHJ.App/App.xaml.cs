@@ -44,6 +44,7 @@ public partial class App : Application
         services.AddSingleton<IDialogService, DialogService>();
         services.AddSingleton<IExplorerService, ExplorerService>();
         services.AddSingleton<INavigationService, NavigationService>();
+        services.AddSingleton<IUpdateService, UpdateService>();
         services.AddSingleton<SessionSyncScheduler>();
 
         // ViewModel / 窗口（BatchList/Work/Exception/Settings 由 NavigationService 用
@@ -66,6 +67,11 @@ public partial class App : Application
 
             // 登录后启动会话内取数调度：立即登录补拉 + 每 120s 会话内定时触发（不卡界面）。
             Services.GetRequiredService<SessionSyncScheduler>().Start();
+
+            // ClickOnce：安装 / 更新后的首次运行，提示当前版本（仅经部署运行时；壳窗口已订阅 Toast）。
+            var update = Services.GetRequiredService<IUpdateService>().GetStatus();
+            if (update is { IsDeployed: true, IsFirstRun: true, CurrentVersion: { } v })
+                Services.GetRequiredService<IDialogService>().Success($"客户端已更新至 v{v}。");
         }
         else
         {
