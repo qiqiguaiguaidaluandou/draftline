@@ -15,8 +15,8 @@ appsettings.local.json
 *.local.json
 
 ## Local sample data (generated)
-/TZHJ_Data/
-TZHJ_Data/
+/Draftline_Data/
+Draftline_Data/
 
 ## 客户端 ClickOnce 发布物（部署时拷入，非源码）
 clickonce/

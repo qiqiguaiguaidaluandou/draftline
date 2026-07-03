@@ -1,0 +1,55 @@
+using Microsoft.Extensions.DependencyInjection;
+using Draftline.Core.Contracts;
+using Draftline.Infrastructure.Fields;
+using Draftline.Infrastructure.Gateways.Http;
+using Draftline.Infrastructure.Options;
+using Draftline.Infrastructure.Storage;
+using Draftline.Infrastructure.Sync;
+
+namespace Draftline.Infrastructure;
+
+public static class DependencyInjection
+{
+    /// <summary>
+    /// 注册真 HTTP 网关 + 本地存储（连后端 Draftline.Gateway）。客户端唯一链路：
+    /// UI/ViewModel/ILocalBatchStore 一律不动——外部接口到位后只换后端防腐层实现。
+    /// </summary>
+    public static IServiceCollection AddDraftlineHttpInfrastructure(this IServiceCollection services, HttpOptions http)
+    {
+        services.AddSingleton(http);
+        services.AddSingleton(new LocalStorageOptions { Root = http.LocalRoot });
+
+        // 字段提供者：默认 schema，登录后被下发 ClientConfig 覆盖（DefaultFieldProvider.Apply）——机制同 Mock 模式。
+        services.AddSingleton<DefaultFieldProvider>();
+        services.AddSingleton<IFieldProvider>(sp => sp.GetRequiredService<DefaultFieldProvider>());
+
+        // 令牌：HttpAuthGateway 登录成功写入，AuthTokenHandler 给后续受保护请求带上 Bearer。
+        services.AddSingleton<IAuthTokenStore, AuthTokenStore>();
+        services.AddTransient<AuthTokenHandler>();
+        // 每个请求附带本机局域网 IP（X-Client-Ip），供服务端记入操作日志的"操作电脑IP"。
+        services.AddTransient<ClientIpHandler>();
+
+        // 六个 typed HttpClient：同一 BaseUrl + 超时 + 令牌处理器 + 客户端 IP 处理器。
+        void Configure(HttpClient client)
+        {
+            client.BaseAddress = new Uri(http.BaseUrl);
+            client.Timeout = TimeSpan.FromSeconds(http.TimeoutSeconds);
+        }
+        IHttpClientBuilder Handlers(IHttpClientBuilder b) =>
+            b.AddHttpMessageHandler<AuthTokenHandler>().AddHttpMessageHandler<ClientIpHandler>();
+        Handlers(services.AddHttpClient<IAuthGateway, HttpAuthGateway>(Configure));
+        Handlers(services.AddHttpClient<IConfigGateway, HttpConfigGateway>(Configure));
+        Handlers(services.AddHttpClient<IDataGateway, HttpDataGateway>(Configure));
+        Handlers(services.AddHttpClient<ISubmitGateway, HttpSubmitGateway>(Configure));
+        Handlers(services.AddHttpClient<IAuditGateway, HttpAuditGateway>(Configure));
+        Handlers(services.AddHttpClient<IOperationLogGateway, HttpOperationLogGateway>(Configure));
+
+        // 补拉编排（手动/登录/会话内定时共用；纯逻辑，跨平台可测）。
+        services.AddSingleton<BatchSyncService>();
+
+        // 本地存储（不变）。
+        services.AddSingleton<ILocalBatchStore, LocalBatchStore>();
+
+        return services;
+    }
+}

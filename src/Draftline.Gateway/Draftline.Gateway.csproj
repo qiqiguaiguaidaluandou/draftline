@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    Draftline.Gateway —— 无状态取数/回传网关（骨架）。
+    带工号调 EBS/PLM 取数、调 SRM/EBS 回传、配置下发、回传审计——本期外部接口未到位，
+    防腐层用 FakeDataSource 顶替（移植自客户端 Mock 的确定性造数）。
+    真接口到位后，只换 AntiCorruption/ 里 IEbsPlmSource/ISubmitSink 的实现（路线图 B1/B2），端点/客户端不动。
+    只引用 Draftline.Core（契约/模型/字段schema），不引用 Draftline.Infrastructure（避免拖入 ClosedXML/本地存储）。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Draftline.Gateway</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Draftline.Core\Draftline.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.*">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.*" />
+    <PackageReference Include="NPOI" Version="2.8.0" />
+    <!-- 认证：密码哈希（PBKDF2，PasswordHasher&lt;T&gt;）+ 带签名/过期的 JWT -->
+    <PackageReference Include="Microsoft.Extensions.Identity.Core" Version="8.0.*" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.*" />
+  </ItemGroup>
+
+</Project>

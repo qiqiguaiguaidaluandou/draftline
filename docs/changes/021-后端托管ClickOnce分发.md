@@ -10,12 +10,12 @@
 
 ## 方案
 
-在 `TZHJ.Gateway` 增加一段静态文件托管，指向发布物目录，并补上 ClickOnce 专属 MIME（`.application` / `.manifest` / `.deploy`），否则客户端认不出部署清单、下载被拦。挂载在鉴权中间件**之前**，使安装包公开可下（用户装客户端时尚未登录）。路径可配、可被 `appsettings.local.json` 覆盖。
+在 `Draftline.Gateway` 增加一段静态文件托管，指向发布物目录，并补上 ClickOnce 专属 MIME（`.application` / `.manifest` / `.deploy`），否则客户端认不出部署清单、下载被拦。挂载在鉴权中间件**之前**，使安装包公开可下（用户装客户端时尚未登录）。路径可配、可被 `appsettings.local.json` 覆盖。
 
 ## 实现
 
-- 新增 `src/TZHJ.Gateway/ClickOnce/ClickOnceOptions.cs`：`DistPath`（发布物目录，默认 `clickonce`，相对内容根）、`RequestPath`（对外前缀，默认 `/tzhj`）。
-- 新增 `src/TZHJ.Gateway/ClickOnce/ClickOnceDistribution.cs`：`UseClickOnceDistribution` 扩展——`PhysicalFileProvider` + `FileExtensionContentTypeProvider`（补三个 MIME）+ `ServeUnknownFileTypes`；目录不存在则 `Directory.CreateDirectory`。
+- 新增 `src/Draftline.Gateway/ClickOnce/ClickOnceOptions.cs`：`DistPath`（发布物目录，默认 `clickonce`，相对内容根）、`RequestPath`（对外前缀，默认 `/draftline`）。
+- 新增 `src/Draftline.Gateway/ClickOnce/ClickOnceDistribution.cs`：`UseClickOnceDistribution` 扩展——`PhysicalFileProvider` + `FileExtensionContentTypeProvider`（补三个 MIME）+ `ServeUnknownFileTypes`；目录不存在则 `Directory.CreateDirectory`。
 - `Program.cs`：绑定 `ClickOnce` 段并注册；在 `UseStaticFiles()` 之后、`UseAuthentication()` 之前调用 `UseClickOnceDistribution`。
 - `appsettings.json` 增 `ClickOnce` 段（模板默认值；真实覆盖走 `appsettings.local.json`）。
 - `.gitignore` 忽略运行时分发目录 `clickonce/`。
@@ -23,7 +23,7 @@
 
 ## 验证
 
-- `TZHJ.Gateway` 编译：**成功，0 error**（2 个既有无关警告：NPOI EULA、PgOperationLogStore 可空）。
+- `Draftline.Gateway` 编译：**成功，0 error**（2 个既有无关警告：NPOI EULA、PgOperationLogStore 可空）。
 - 中间件逻辑用等价的独立最小 Web 应用实测（绕开本机缺 `appsettings.local.json` 导致的 DB/EBS 启动问题）：
   - `.application` → `application/x-ms-application` ✅
   - `.manifest` → `application/x-ms-manifest` ✅

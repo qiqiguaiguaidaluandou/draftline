@@ -18,7 +18,7 @@
 1. **共享服务 `IAdminService`/`AdminService`**：用户（列/建/重置密码/启停用/挂角色）、角色（列/建/改/删）、操作日志（筛选分页）、可选组。`/api/admin/*` 端点改为薄封装调它；Blazor 页面也调它。
 2. **新增后端端点**：`GET /api/admin/logs`（按 工号/动作/状态/时间 筛选 + 分页）、`GET /api/admin/groups`（现有批次里出现过的 流程+组，配角色时下拉防打错）。
 3. **网关托管 Blazor**：`AddRazorComponents().AddInteractiveServerComponents()` + `MapRazorComponents<App>().AddInteractiveServerRenderMode()`；`UseStaticFiles/UseAuthentication/UseAuthorization/UseAntiforgery`。
-4. **Cookie 登录**：`/admin/login`（表单 POST，`SignInAsync` 写 Cookie，声明 `tzhj:isAdmin`）、`/admin/logout`（`SignOutAsync`）；策略 `AdminOnly` 要求该声明。登录失败/非管理员记 `AdminLogin` 审计。
+4. **Cookie 登录**：`/admin/login`（表单 POST，`SignInAsync` 写 Cookie，声明 `draftline:isAdmin`）、`/admin/logout`（`SignOutAsync`）；策略 `AdminOnly` 要求该声明。登录失败/非管理员记 `AdminLogin` 审计。
 5. **页面**（`/admin/*`，`@rendermode InteractiveServer`，`[Authorize(Policy=AdminOnly)]`）：登录、用户管理、角色管理、操作日志；侧边导航布局；未授权重定向登录。
 6. EF 上下文/DbContext 用法：Blazor 页面每次操作 `IServiceScopeFactory.CreateScope()` 取新 `IAdminService`（避免长生命周期 DbContext 并发问题）。
 
@@ -37,12 +37,12 @@
 
 **Core 契约** — `Contracts/Http/HttpDtos.cs`：新增 `AdminLogEntry`、`AdminLogListResponse`、`GroupOption`。
 
-**测试** — `tests/TZHJ.Tests/Auth/AdminServiceTests.cs`：建用户（强制改密/查重/弱口令）、角色建+挂载并体现在有效权限、未知角色拒绝、角色重名拒绝、删角色级联清挂载、禁停用自己、日志筛选+分页。
+**测试** — `tests/Draftline.Tests/Auth/AdminServiceTests.cs`：建用户（强制改密/查重/弱口令）、角色建+挂载并体现在有效权限、未知角色拒绝、角色重名拒绝、删角色级联清挂载、禁停用自己、日志筛选+分页。
 
 ## 验证
 
-- ✅ `dotnet build TZHJ.sln -p:EnableWindowsTargeting=true` → **0 Error**（含全部 Razor 组件编译）。
-- ✅ `dotnet test tests/TZHJ.Tests` → **59 Passed / 0 Failed**（含 8 个新增 AdminService 用例）。
+- ✅ `dotnet build Draftline.sln -p:EnableWindowsTargeting=true` → **0 Error**（含全部 Razor 组件编译）。
+- ✅ `dotnet test tests/Draftline.Tests` → **59 Passed / 0 Failed**（含 8 个新增 AdminService 用例）。
 - ✅ 启动冒烟（沙箱无 PostgreSQL）：网关 DI 容器构建成功、DataProtection 初始化（Cookie/Blazor 依赖）、进入服务启动阶段——证明 Blazor 宿主/Cookie 鉴权/中间件注册无误；随后因 `DataIngestionService` 连不上库而中止（既有行为：网关启动即需可达的 PostgreSQL，与本次改动无关）。
 - 待真机浏览器验证（沙箱无 GUI/无库，无法跑）：登录 Cookie 往返、各页交互渲染、增删改实际落库。验证方法：配好库与 `Jwt`/`Admin` 后启动网关，浏览器开 `http://<网关>:8080/admin/login`，用引导管理员登录。
 

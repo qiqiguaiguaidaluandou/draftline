@@ -1,0 +1,68 @@
+using System.Collections.ObjectModel;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+using Draftline.App.Services;
+using Draftline.Core.Contracts;
+using Draftline.Core.Enums;
+using Draftline.Core.Models;
+
+namespace Draftline.App.ViewModels;
+
+/// <summary>
+/// 异常待跟进池（跨批次、本流程内）。记来源批次，后续解决后可补处理（骨架先只读列示）。
+/// </summary>
+public sealed partial class ExceptionPoolViewModel : ViewModelBase
+{
+    private readonly ILocalBatchStore _store;
+    private readonly ISession _session;
+    private readonly IExplorerService _explorer;
+    private readonly INavigationService _nav;
+    private readonly FlowType _flow;
+
+    public ExceptionPoolViewModel(
+        ILocalBatchStore store, ISession session, IExplorerService explorer, INavigationService nav, FlowType flow)
+    {
+        _store = store;
+        _session = session;
+        _explorer = explorer;
+        _nav = nav;
+        _flow = flow;
+
+        Title = $"{(flow == FlowType.Pricing ? "图纸核价" : "挑图纸")} · 异常待跟进";
+        PoolPath = LocalPaths.LocalExceptionPoolRoot(session.Config.LocalRoot, flow);
+    }
+
+    public string PoolPath { get; }
+
+    [ObservableProperty] private bool _showGroupColumn;
+
+    public ObservableCollection<ExceptionItem> Items { get; } = new();
+
+    public override async Task LoadAsync()
+    {
+        IsBusy = true;
+        try
+        {
+            Items.Clear();
+            var list = await _store.ListExceptionsAsync(_flow, _session.Operator.EmployeeId);
+            
+            // 核价恒显示产品线组列：即便当前只有一个组，也需标明是组1还是组2，否则无法区分数据归属。
+            // 挑图统一用 Center、不分组 → 永不显示该列。
+            ShowGroupColumn = _flow == FlowType.Pricing;
+
+            foreach (var item in list)
+                Items.Add(item);
+        }
+        finally { IsBusy = false; }
+    }
+
+    [RelayCommand]
+    private void OpenFolder() => _explorer.OpenFolder(PoolPath);
+
+    [RelayCommand]
+    private Task Refresh() => LoadAsync();
+
+    /// <summary>补处理：进入该行的全字段补处理页（重填 + 单行补回传）。</summary>
+    [RelayCommand]
+    private void Resolve(ExceptionItem item) => _nav.ToExceptionResolve(_flow, item);
+}

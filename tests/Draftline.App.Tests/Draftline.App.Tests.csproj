@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Draftline.App.Tests —— 客户端 WPF 层的单元测试（RowViewModel 状态机等）。
+    因 RowViewModel 引用 System.Windows（WPF），本工程必须 net8.0-windows + UseWPF，
+    且只能在 Windows 上 `dotnet test` 运行（Linux 仅能编译，加 -p:EnableWindowsTargeting=true）。
+    跨平台、可在 Linux 跑的逻辑测试见 tests/Draftline.Tests。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Draftline.App\Draftline.App.csproj" />
+  </ItemGroup>
+
+</Project>

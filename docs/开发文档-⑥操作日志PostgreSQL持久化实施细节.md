@@ -3,14 +3,14 @@
 ## 1. 目标
 将目前基于 JSONL 文件的 `FileOperationLogStore` 迁移至 PostgreSQL 数据库。
 *   **原因**：统一数据存储，提升查询性能（特别是操作员查看“我的操作日志”时），方便未来基于 SQL 的多维度统计分析。
-*   **策略**：新建 `PgOperationLogStore` 实现类，替换原有的文件实现，利用现有的 EF Core 基础设施（`TzhjDbContext`）。
+*   **策略**：新建 `PgOperationLogStore` 实现类，替换原有的文件实现，利用现有的 EF Core 基础设施（`DraftlineDbContext`）。
 
 ---
 
 ## 2. 数据库设计
 
 ### 2.1 实体模型设计 (Entity)
-在 `src/TZHJ.Gateway/Stores/` 目录下创建 `OperationLogEntity.cs`，对应数据库中的 `operation_logs` 表。
+在 `src/Draftline.Gateway/Stores/` 目录下创建 `OperationLogEntity.cs`，对应数据库中的 `operation_logs` 表。
 
 **表结构 (`operation_logs`)**：
 *   **`log_id`** (BIGSERIAL / long, PK): 自增主键。
@@ -21,8 +21,8 @@
 *   **`client_ip`** (VARCHAR(50)): 客户端 IP 地址。
 *   **`operated_at`** (TIMESTAMPTZ): 操作发生时间（UTC）。
 
-### 2.2 TzhjDbContext 扩展
-在现有的 `TzhjDbContext` 中添加 DbSet 并配置索引：
+### 2.2 DraftlineDbContext 扩展
+在现有的 `DraftlineDbContext` 中添加 DbSet 并配置索引：
 *   为 `employee_id` 建立索引 `idx_oplog_employee`。
 *   为 `operated_at` 建立索引 `idx_oplog_time`。
 

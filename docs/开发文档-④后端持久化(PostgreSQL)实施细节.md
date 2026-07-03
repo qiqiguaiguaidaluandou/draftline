@@ -1,7 +1,7 @@
 # 开发文档-④ 后端持久化 (PostgreSQL) 实施细节
 
 ## 1. 概述
-为了满足生产环境下的数据追溯、审计以及客户端“补拉”逻辑的准确性，后端网关 (TZHJ.Gateway) 已从内存存储切换为基于 **PostgreSQL** 的持久化方案。本文档详细记录了已完成的审计存储实现及后续配置持久化的计划。
+为了满足生产环境下的数据追溯、审计以及客户端“补拉”逻辑的准确性，后端网关 (Draftline.Gateway) 已从内存存储切换为基于 **PostgreSQL** 的持久化方案。本文档详细记录了已完成的审计存储实现及后续配置持久化的计划。
 
 ---
 
@@ -14,7 +14,7 @@
 
 ### 2.2 核心代码变更
 *   **实体模型** (`Stores/AuditRecord.cs`)：定义了映射到数据库 `audit_records` 表的结构，包括主键、字段长度限制及列名映射。
-*   **数据库上下文** (`Stores/TzhjDbContext.cs`)：
+*   **数据库上下文** (`Stores/DraftlineDbContext.cs`)：
     *   管理 `AuditRecords` 集合。
     *   **性能优化**：在 `OnModelCreating` 中为 `(Flow, EmployeeId, WindowStart, WindowEnd)` 建立了复合索引 `idx_audit_lookup`，确保客户端登录补拉时的查询速度。
 *   **持久化逻辑** (`Stores/PgAuditStore.cs`)：
@@ -43,10 +43,10 @@
 *   需安装 `.NET 8 SDK`。
 
 ### 3.2 配置步骤
-1.  **修改连接字符串**：在 `src/TZHJ.Gateway/appsettings.json` 中，修改 `DefaultConnection` 节（注意：若连接远程 Linux 且 5432 端口被占用，请指定 5433）：
+1.  **修改连接字符串**：在 `src/Draftline.Gateway/appsettings.json` 中，修改 `DefaultConnection` 节（注意：若连接远程 Linux 且 5432 端口被占用，请指定 5433）：
     ```json
     "ConnectionStrings": {
-      "DefaultConnection": "Host=服务器IP;Port=5433;Database=tzhj_db;Username=postgres;Password=你的密码"
+      "DefaultConnection": "Host=服务器IP;Port=5433;Database=draftline_db;Username=postgres;Password=你的密码"
     }
     ```
 
@@ -63,7 +63,7 @@
 3.  **应用数据库迁移**：
     在项目根目录下运行：
     ```powershell
-    dotnet dotnet-ef database update -p src/TZHJ.Gateway
+    dotnet dotnet-ef database update -p src/Draftline.Gateway
     ```
 
 ---

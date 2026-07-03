@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Draftline.Core —— 领域模型 + 网关契约 + 字段 schema + 本地路径/批次窗口规则。
+    纯 .NET、无 WPF / 无文件 IO 实现，跨平台；客户端与后端将来可共用同一份契约。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Draftline.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>

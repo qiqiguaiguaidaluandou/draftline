@@ -49,7 +49,7 @@ psql -p 5433
 
 # 执行 SQL 语句
 ALTER USER postgres WITH PASSWORD '你的强密码';
-CREATE DATABASE tzhj_db;
+CREATE DATABASE draftline_db;
 
 # 退出
 \q
@@ -61,17 +61,17 @@ exit
 ## 3. 开发端 (Windows 笔记本) 配置
 
 ### 3.1 修改连接字符串
-在 `src/TZHJ.Gateway/appsettings.json` 中配置远程连接。**注意必须显式指定 Port 端口**：
+在 `src/Draftline.Gateway/appsettings.json` 中配置远程连接。**注意必须显式指定 Port 端口**：
 ```json
 "ConnectionStrings": {
-  "DefaultConnection": "Host=服务器真实IP;Port=5433;Database=tzhj_db;Username=postgres;Password=你的强密码"
+  "DefaultConnection": "Host=服务器真实IP;Port=5433;Database=draftline_db;Username=postgres;Password=你的强密码"
 }
 ```
 
 ### 3.2 同步表结构 (EF Core Migrations)
 在笔记本终端的项目根目录下执行，跨网络创建表：
 ```powershell
-dotnet dotnet-ef database update -p src/TZHJ.Gateway/TZHJ.Gateway.csproj
+dotnet dotnet-ef database update -p src/Draftline.Gateway/Draftline.Gateway.csproj
 ```
 
 ---
@@ -88,14 +88,14 @@ Test-NetConnection -ComputerName 服务器IP -Port 5433
 ### 4.2 本地连接验证
 在 Linux 服务器上验证：
 ```bash
-psql -h localhost -p 5433 -U postgres -d tzhj_db
+psql -h localhost -p 5433 -U postgres -d draftline_db
 ```
 *   若能进入提示符，说明本地监听正常。
 
 ### 4.3 查看已创建的表
 ```bash
 # 在 Linux 上执行
-sudo -u postgres psql -p 5433 -d tzhj_db -c "\dt"
+sudo -u postgres psql -p 5433 -d draftline_db -c "\dt"
 ```
 *   应当看到 `audit_records` 和 `__EFMigrationsHistory` 两张表。
 

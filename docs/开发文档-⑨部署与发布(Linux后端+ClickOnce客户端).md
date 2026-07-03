@@ -4,8 +4,8 @@
 
 本项目是「Linux 服务器跑后端 + Windows 桌面客户端」的组合，两者是**两条独立的发布线**：
 
-- **后端 `TZHJ.Gateway`**（ASP.NET Core，`net8.0`）——跑在 Linux 服务器上，原生支持。改后端只需重新部署服务器，**所有客户端即时生效、无需动客户端**。
-- **客户端 `TZHJ.App`**（WPF，`net8.0-windows`）——通过 **ClickOnce** 分发到操作员 Windows 电脑，靠版本号自动升级。
+- **后端 `Draftline.Gateway`**（ASP.NET Core，`net8.0`）——跑在 Linux 服务器上，原生支持。改后端只需重新部署服务器，**所有客户端即时生效、无需动客户端**。
+- **客户端 `Draftline.App`**（WPF，`net8.0-windows`）——通过 **ClickOnce** 分发到操作员 Windows 电脑，靠版本号自动升级。
 
 > **硬约束（已实测）**：ClickOnce 客户端包**必须在 Windows 上生成**，Linux 无法产出。
 > 在 Linux 上执行 `dotnet publish ... -p:PublishProfile=ClickOnceProfile` 会报：
@@ -17,7 +17,7 @@
 ```
 ┌─────────────────────┐        ┌──────────────────────────┐
 │  Windows 构建机       │        │   Linux 服务器            │
-│ (开发PC / Win VM /    │        │  ① 跑后端 TZHJ.Gateway    │
+│ (开发PC / Win VM /    │        │  ① 跑后端 Draftline.Gateway    │
 │  GitHub Win runner)  │        │  ② 当 ClickOnce 分发点     │
 │  dotnet publish      │        │     (nginx serve 静态文件) │
 │  ↓ 出 ClickOnce 包    │        └──────────┬───────────────┘
@@ -25,7 +25,7 @@
 └─────────────────────┘                   │  用户从这里装/自动更新
                                    ┌────────▼─────────┐
                                    │ 用户 Windows 电脑  │
-                                   │  装 TZHJ.App 客户端 │
+                                   │  装 Draftline.App 客户端 │
                                    │  HTTP 调后端接口     │
                                    └──────────────────┘
 ```
@@ -36,7 +36,7 @@
 
 ## 2. 后端上线（Linux）
 
-`TZHJ.Gateway` 是标准 ASP.NET Core，Linux 原生支持。
+`Draftline.Gateway` 是标准 ASP.NET Core，Linux 原生支持。
 
 ### 2.1 发布
 
@@ -44,30 +44,30 @@
 
 ```bash
 # 框架依赖发布（需服务器装 aspnetcore-runtime-8.0）
-dotnet publish src/TZHJ.Gateway/TZHJ.Gateway.csproj -c Release -o /opt/tzhj-gateway
+dotnet publish src/Draftline.Gateway/Draftline.Gateway.csproj -c Release -o /opt/draftline-gateway
 ```
 
 若不想在服务器装运行时，改为自包含：
 
 ```bash
-dotnet publish src/TZHJ.Gateway/TZHJ.Gateway.csproj -c Release \
-  -r linux-x64 --self-contained true -o /opt/tzhj-gateway
+dotnet publish src/Draftline.Gateway/Draftline.Gateway.csproj -c Release \
+  -r linux-x64 --self-contained true -o /opt/draftline-gateway
 ```
 
 （数据库连接等按 `docs/开发文档-⑤` 配好；后端与 PostgreSQL 的对接不在本文范围。）
 
 ### 2.2 用 systemd 常驻
 
-`/etc/systemd/system/tzhj-gateway.service`：
+`/etc/systemd/system/draftline-gateway.service`：
 
 ```ini
 [Unit]
-Description=TZHJ Gateway
+Description=Draftline Gateway
 After=network.target
 
 [Service]
-WorkingDirectory=/opt/tzhj-gateway
-ExecStart=/usr/bin/dotnet /opt/tzhj-gateway/TZHJ.Gateway.dll
+WorkingDirectory=/opt/draftline-gateway
+ExecStart=/usr/bin/dotnet /opt/draftline-gateway/Draftline.Gateway.dll
 Environment=ASPNETCORE_URLS=http://127.0.0.1:5080
 Environment=ASPNETCORE_ENVIRONMENT=Production
 Restart=always
@@ -79,11 +79,11 @@ WantedBy=multi-user.target
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now tzhj-gateway
-sudo systemctl status tzhj-gateway
+sudo systemctl enable --now draftline-gateway
+sudo systemctl status draftline-gateway
 ```
 
-（自包含发布时把 `ExecStart` 改为 `/opt/tzhj-gateway/TZHJ.Gateway` 可执行文件本身。）
+（自包含发布时把 `ExecStart` 改为 `/opt/draftline-gateway/Draftline.Gateway` 可执行文件本身。）
 
 ### 2.3 nginx 反代 + HTTPS
 
@@ -97,11 +97,11 @@ sudo systemctl status tzhj-gateway
 
 ### 3.1 发布前必改 `pubxml`
 
-`src/TZHJ.App/Properties/PublishProfiles/ClickOnceProfile.pubxml` 的两处占位（URL 会被**写进部署清单**，故必须发布前定好）：
+`src/Draftline.App/Properties/PublishProfiles/ClickOnceProfile.pubxml` 的两处占位（URL 会被**写进部署清单**，故必须发布前定好）：
 
 ```xml
-<PublishUrl>https://下载域名/tzhj/</PublishUrl>
-<InstallUrl>https://下载域名/tzhj/</InstallUrl>
+<PublishUrl>https://下载域名/draftline/</PublishUrl>
+<InstallUrl>https://下载域名/draftline/</InstallUrl>
 ```
 
 指向 §4 的 Linux 分发点 URL。
@@ -112,26 +112,26 @@ sudo systemctl status tzhj-gateway
 ### 3.2 在 Windows 上发布
 
 ```powershell
-dotnet publish src\TZHJ.App\TZHJ.App.csproj -p:PublishProfile=ClickOnceProfile
+dotnet publish src\Draftline.App\Draftline.App.csproj -p:PublishProfile=ClickOnceProfile
 ```
 
-（或 Visual Studio 右键 `TZHJ.App` → 发布 → 选 `ClickOnceProfile`。）
+（或 Visual Studio 右键 `Draftline.App` → 发布 → 选 `ClickOnceProfile`。）
 
 ### 3.3 产物结构
 
-输出在 `src\TZHJ.App\bin\publish\`：
+输出在 `src\Draftline.App\bin\publish\`：
 
 ```
 publish\
 ├── setup.exe                    ← 引导安装程序（按需装 .NET 8 桌面运行时）
-├── TZHJ.App.application          ← 部署清单（记录"最新版本号+位置"，更新判据核心）
+├── Draftline.App.application          ← 部署清单（记录"最新版本号+位置"，更新判据核心）
 └── Application Files\
-    └── TZHJ.App_1_0_0_1\         ← 本版全部文件
-        ├── TZHJ.App.dll.deploy   ← 客户端主程序（.deploy 后缀是 ClickOnce 默认）
-        ├── TZHJ.Core.dll.deploy
-        ├── TZHJ.Infrastructure.dll.deploy
+    └── Draftline.App_1_0_0_1\         ← 本版全部文件
+        ├── Draftline.App.dll.deploy   ← 客户端主程序（.deploy 后缀是 ClickOnce 默认）
+        ├── Draftline.Core.dll.deploy
+        ├── Draftline.Infrastructure.dll.deploy
         ├── appsettings.json.deploy
-        └── TZHJ.App.application  ← 本版应用清单
+        └── Draftline.App.application  ← 本版应用清单
 ```
 
 `.deploy` 后缀（`MapFileExtensions` 默认开）让 Web 服务器不因未知扩展名拦下载。
@@ -146,27 +146,27 @@ publish\
 
 ### 方式 A：后端 Gateway 直接托管（推荐）
 
-后端已内置 ClickOnce 静态文件托管（`src/TZHJ.Gateway/ClickOnce/`，对应 `changes/021`），并配好了
+后端已内置 ClickOnce 静态文件托管（`src/Draftline.Gateway/ClickOnce/`，对应 `changes/021`），并配好了
 `.application` / `.manifest` / `.deploy` 的 MIME。**无需装 nginx**：
 
 1. 把 Windows 出的 `publish\` **整个目录**拷进后端的分发目录（默认 `{后端目录}/clickonce/`，即
-   `/opt/tzhj-gateway/clickonce/`）。
-2. 客户端即可从 **`http(s)://<后端host>/tzhj/setup.exe`** 安装与自动更新——和 API 同一 host/端口/域名。
+   `/opt/draftline-gateway/clickonce/`）。
+2. 客户端即可从 **`http(s)://<后端host>/draftline/setup.exe`** 安装与自动更新——和 API 同一 host/端口/域名。
 
 路径可在 `appsettings.local.json` 覆盖：
 
 ```json
-"ClickOnce": { "DistPath": "clickonce", "RequestPath": "/tzhj" }
+"ClickOnce": { "DistPath": "clickonce", "RequestPath": "/draftline" }
 ```
 
-- 测试机：客户端从 `http://IP:端口/tzhj/` 装；`pubxml` 的 `InstallUrl` 也填这个。
-- 生产：基础设施把域名转发到后端端口后，URL 换成 `https://域名/tzhj/`（`InstallUrl` 烤进清单，故换环境要重出包）。
+- 测试机：客户端从 `http://IP:端口/draftline/` 装；`pubxml` 的 `InstallUrl` 也填这个。
+- 生产：基础设施把域名转发到后端端口后，URL 换成 `https://域名/draftline/`（`InstallUrl` 烤进清单，故换环境要重出包）。
 
-> 上传：`scp -r publish/* user@server:/opt/tzhj-gateway/clickonce/`。目录不存在后端会自动建。
+> 上传：`scp -r publish/* user@server:/opt/draftline-gateway/clickonce/`。目录不存在后端会自动建。
 
 ### 方式 B：nginx 单独发（仅当不想让后端托管时）
 
-把 `publish\` 上传到 `/var/www/tzhj/`，nginx 当静态文件发。**关键是 MIME 类型**，否则客户端认不出清单。
+把 `publish\` 上传到 `/var/www/draftline/`，nginx 当静态文件发。**关键是 MIME 类型**，否则客户端认不出清单。
 
 ```nginx
 server {
@@ -175,7 +175,7 @@ server {
     # ssl_certificate / ssl_certificate_key ...
 
     # ① ClickOnce 分发点
-    location /tzhj/ {
+    location /draftline/ {
         root /var/www;
         types {
             application/x-ms-application  application;
@@ -195,7 +195,7 @@ server {
 }
 ```
 
-上传可用 `scp -r publish/* user@server:/var/www/tzhj/` 或 CI 自动推送（见 §6）。方式 B 需自备域名转发/TLS 时才用；一般选方式 A。
+上传可用 `scp -r publish/* user@server:/var/www/draftline/` 或 CI 自动推送（见 §6）。方式 B 需自备域名转发/TLS 时才用；一般选方式 A。
 
 ---
 
@@ -203,13 +203,13 @@ server {
 
 ### 5.1 首次安装（每个操作员一次）
 
-1. 浏览器打开 `https://下载域名/tzhj/` → 点 `setup.exe`（或 `TZHJ.App.application`）。
+1. 浏览器打开 `https://下载域名/draftline/` → 点 `setup.exe`（或 `Draftline.App.application`）。
 2. `setup.exe` 检测到未装 .NET 8 桌面运行时 → 自动下载安装（`BootstrapperEnabled=true`）。
 3. ClickOnce 装到用户目录 + 建开始菜单/桌面快捷方式（`Install=true` / `CreateDesktopShortcut=true`）。
 
 ### 5.2 后续更新（Foreground 逻辑）
 
-- 用户每次**从快捷方式启动** → 客户端联网读分发点 `TZHJ.App.application` → 版本比本地高就**先下载安装再启动**（同步，启动前完成）。
+- 用户每次**从快捷方式启动** → 客户端联网读分发点 `Draftline.App.application` → 版本比本地高就**先下载安装再启动**（同步，启动前完成）。
 - `UpdateRequired=false`：更新下载失败（如断网）时允许本次先用旧版进去干活，不卡死。
 - 更新后首次运行弹 Toast「客户端已更新至 vX」（`App.xaml.cs` + `UpdateService`）。
 
@@ -223,8 +223,8 @@ server {
 
 | 你改了 | 操作 |
 |---|---|
-| **后端** | Linux 上重新 `dotnet publish` Gateway → `sudo systemctl restart tzhj-gateway`。**客户端不用动**，全员即时生效 |
-| **客户端**（或 Core/Infra 里客户端用到的部分） | ① Windows 上 `ApplicationVersion` +1 → ② `dotnet publish` ClickOnce → ③ 新 `publish\` 覆盖上传到后端 `clickonce/`（方式 A）或 `/var/www/tzhj/`（方式 B）。用户下次启动自动更新 |
+| **后端** | Linux 上重新 `dotnet publish` Gateway → `sudo systemctl restart draftline-gateway`。**客户端不用动**，全员即时生效 |
+| **客户端**（或 Core/Infra 里客户端用到的部分） | ① Windows 上 `ApplicationVersion` +1 → ② `dotnet publish` ClickOnce → ③ 新 `publish\` 覆盖上传到后端 `clickonce/`（方式 A）或 `/var/www/draftline/`（方式 B）。用户下次启动自动更新 |
 | **共享库 Core/Infrastructure** | 影响客户端 → 重发 ClickOnce；影响后端 → 重部署后端；两边都用到 → 两边各做一次 |
 
 ---
@@ -252,7 +252,7 @@ jobs:
           dotnet-version: '8.0.x'
       - name: Publish ClickOnce
         run: >
-          dotnet publish src/TZHJ.App/TZHJ.App.csproj
+          dotnet publish src/Draftline.App/Draftline.App.csproj
           -p:PublishProfile=ClickOnceProfile
           -p:ApplicationVersion=${{ github.event.inputs.version }}
       - name: Upload to Linux 分发点
@@ -260,8 +260,8 @@ jobs:
         run: |
           echo "${{ secrets.DEPLOY_SSH_KEY }}" > key && chmod 600 key
           scp -i key -o StrictHostKeyChecking=no -r \
-            src/TZHJ.App/bin/publish/* \
-            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/tzhj/
+            src/Draftline.App/bin/publish/* \
+            ${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/var/www/draftline/
 ```
 
 需在仓库 Secrets 配 `DEPLOY_SSH_KEY` / `DEPLOY_USER` / `DEPLOY_HOST`。
@@ -270,7 +270,7 @@ jobs:
 
 ## 8. 待决 / 待办
 
-- [ ] 确定下载域名 + HTTPS 证书，回填 `pubxml` 的 `PublishUrl` / `InstallUrl`（当前仍是占位 `\\YOUR-SERVER\TZHJ\`）。
+- [ ] 确定下载域名 + HTTPS 证书，回填 `pubxml` 的 `PublishUrl` / `InstallUrl`（当前仍是占位 `\\YOUR-SERVER\Draftline\`）。
 - [ ] 决定 `SelfContained` 是否改 `true`（免用户装运行时）。
 - [ ] 首次在 Windows 上实际发布一次，端到端验证安装 + 自动更新（Linux 无法验证运行期 ClickOnce 行为）。
 - [ ] 对应路线图 `docs/路线图.md` 的「D4 ClickOnce 发布/自动更新」——客户端侧逻辑已完成，剩发布地址与实际发布。
