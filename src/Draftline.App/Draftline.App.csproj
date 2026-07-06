@@ -9,6 +9,10 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
+    <!-- 让"还原(restore)"阶段就带上 win-x64，与 ClickOnceProfile.pubxml 的 RuntimeIdentifier 一致。
+         否则 VS 图形界面发布时还原不含此 RID，发布阶段才套上会报 NETSDK1047（资产文件缺 net8.0-windows/win-x64）。
+         复数 RuntimeIdentifiers 作用于还原，命令行/VS 两种发布都能一步成功。 -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
