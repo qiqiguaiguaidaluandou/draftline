@@ -2,13 +2,10 @@ namespace Draftline.Gateway.AntiCorruption;
 
 /// <summary>
 /// EBS 取数接口配置（来自 appsettings 的 "Ebs" 段）。
-/// 真实地址/密钥放 appsettings.local.json（不进 git）。Enabled=false 时仍用 FakeDataSource。
+/// 真实地址/密钥放 appsettings.local.json（不进 git）。URL 留空则取数在运行时报错并按计划重采。
 /// </summary>
 public sealed class EbsOptions
 {
-    /// <summary>是否启用真实 EBS 取数。false（默认）→ 继续用 FakeDataSource 造数。</summary>
-    public bool Enabled { get; set; } = false;
-
     /// <summary>图纸核价接口 URL（POST）。两个接口地址不同，分别配置。</summary>
     public string PricingUrl { get; set; } = "";
 

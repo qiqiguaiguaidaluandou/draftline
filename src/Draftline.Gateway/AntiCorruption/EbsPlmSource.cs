@@ -74,7 +74,8 @@ public sealed class EbsPlmSource : IEbsPlmSource
     }
 
     /// <summary>
-    /// 按物料编码调 PLM：①变更状态 → hasChange 填 Y/N（未返回的料号留空）；②图纸附件 → 下载字节挂到对应行。
+    /// 按物料编码调 PLM，时序：变更检查 → 图纸附件下载 → 再次变更检查。hasChange 以第二次变更检查结果为准
+    /// （Y/N，未返回的料号留空）；图纸下载字节挂到对应行。
     /// PLM 调用失败会向上抛（本批不登记、下个轮询重采）；单料号缺数据/单文件下载失败不阻断其余行。
     /// </summary>
     private async Task EnrichWithPlmAsync(IReadOnlyList<SourceRow> rows, string mcKey, string hcKey, CancellationToken ct)
@@ -89,8 +90,11 @@ public sealed class EbsPlmSource : IEbsPlmSource
             .ToList();
         if (codes.Count == 0) return;
 
-        var changeFlags = await _plm.FetchChangeFlagsAsync(codes, ct);
+        // 时序：变更检查 → 取图纸 → 再次变更检查。第一次变更检查按业务要求在取图前先探一次，
+        // 但以第二次（取图之后）的结果为准写入 hasChange，反映取图期间可能发生的变更状态变化。
+        await _plm.FetchChangeFlagsAsync(codes, ct);
         var drawings = await _plm.FetchDrawingsAsync(codes, ct);
+        var changeFlags = await _plm.FetchChangeFlagsAsync(codes, ct);
 
         foreach (var r in rows)
         {

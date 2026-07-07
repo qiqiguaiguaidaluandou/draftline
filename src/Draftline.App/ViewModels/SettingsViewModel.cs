@@ -6,7 +6,7 @@ using Draftline.Infrastructure.Options;
 namespace Draftline.App.ViewModels;
 
 /// <summary>
-/// 设置：当前操作员（本机固定）、本地数据根、后端网关地址、客户端版本。图纸由操作员到本地文件夹自行打开。
+/// 设置：当前操作员（本机固定）、本地数据根、客户端版本。图纸由操作员到本地文件夹自行打开。
 /// </summary>
 public sealed partial class SettingsViewModel : ViewModelBase
 {
@@ -24,13 +24,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
         var op = session.Operator;
         OperatorText = $"{op.DisplayName} · 工号 {op.EmployeeId} · {op.Department} / {op.Position}";
         LocalRoot = storage.Root;
-        GatewayUrl = session.Config.GatewayBaseUrl;
-        Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
+        // 客户端版本显示当前 ClickOnce 部署版本（重登/更新后自动反映），非部署运行时回退程序集版本。
+        Version = _update.GetStatus().CurrentVersion?.ToString()
+                  ?? Assembly.GetExecutingAssembly().GetName().Version?.ToString()
+                  ?? "0.1.0";
     }
 
     public string OperatorText { get; }
     public string LocalRoot { get; }
-    public string GatewayUrl { get; }
     public string Version { get; }
 
     [RelayCommand]

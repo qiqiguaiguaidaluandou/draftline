@@ -4,7 +4,7 @@ namespace Draftline.Gateway.AntiCorruption;
 
 /// <summary>
 /// 取数防腐层：带工号向 EBS 取需求行、向 PLM 取图纸/"是否变更"。
-/// 本期由 FakeDataSource 顶替；真接口到位后换成调 EBS/PLM 的实现（路线图 B1），端点不动。
+/// 由 EbsPlmSource + PlmClient 调真实 EBS/PLM 接口实现（路线图 B1）。
 /// </summary>
 public interface IEbsPlmSource
 {

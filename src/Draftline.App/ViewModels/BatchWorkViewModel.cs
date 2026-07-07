@@ -74,11 +74,16 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     public int ExceptionCount => Rows.Count(r => r.Status == RowStatus.Exception);
     public string ProgressText => $"已处理 {DoneCount + ExceptionCount} / {Rows.Count}";
 
-    public bool CanSubmit => !IsReadOnly && Rows.Count > 0 && PendingCount == 0 && _session.Operator.CanSubmit;
+    /// <summary>挑图→EBS 回传接口尚未提供：该流程暂不支持回传（按钮禁用、不调后端、不进异常池）。</summary>
+    public bool IsSubmitSupported => _flow == FlowType.Pricing;
 
-    public string GateText => CanSubmit
-        ? $"✅ 全部行已处理完毕（已填写或挂起异常），可整批回传 {TargetSystem}。"
-        : $"还有 {PendingCount} 行处于「待处理」，每行需先填写或挂起异常，「上传」才可点（提交闸门）。";
+    public bool CanSubmit => IsSubmitSupported && !IsReadOnly && Rows.Count > 0 && PendingCount == 0 && _session.Operator.CanSubmit;
+
+    public string GateText => !IsSubmitSupported
+        ? $"挑图回传 {TargetSystem} 接口未接入，暂不支持回传。"
+        : CanSubmit
+            ? $"✅ 全部行已处理完毕（已填写或挂起异常），可整批回传 {TargetSystem}。"
+            : $"还有 {PendingCount} 行处于「待处理」，每行需先填写或挂起异常，「上传」才可点（提交闸门）。";
 
     public override async Task LoadAsync()
     {

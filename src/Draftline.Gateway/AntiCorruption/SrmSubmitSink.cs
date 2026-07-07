@@ -9,7 +9,7 @@ namespace Draftline.Gateway.AntiCorruption;
 
 /// <summary>
 /// 真实回传实现（路线图 B2）。图纸核价价格 → SRM；鉴权复用 EBS 的 JWT。
-/// 机加挑图 → EBS 的回传接口尚未提供，那一支委托给 FakeDataSource 占位。
+/// 机加挑图 → EBS 的回传接口尚未提供，客户端已拦截该动作；服务端若被触达则抛「未接入」。
 ///
 /// 请求体固定外层：{ interfaceCode, content: { itemList: [{ itemCode, price }] } }（price 按字符串发）。
 /// 响应按每条 data[].remark 逐行判定：含"失败"前缀 → 该行失败（永久，由端点单独留痕、不重试）；
@@ -21,26 +21,24 @@ public sealed class SrmSubmitSink : ISubmitSink
     private readonly SrmOptions _opt;
     private readonly EbsOptions _ebs;
     private readonly EbsTokenProvider _token;
-    private readonly FakeDataSource _fake;
     private readonly ILogger<SrmSubmitSink> _logger;
 
     public SrmSubmitSink(HttpClient http, SrmOptions opt, EbsOptions ebs, EbsTokenProvider token,
-        FakeDataSource fake, ILogger<SrmSubmitSink> logger)
+        ILogger<SrmSubmitSink> logger)
     {
         _http = http;
         _opt = opt;
         _ebs = ebs;
         _token = token;
-        _fake = fake;
         _logger = logger;
     }
 
     public async Task<IReadOnlyList<SubmitRowResult>> SubmitAsync(
         FlowType flow, string employeeId, IReadOnlyList<SubmitRow> rows, CancellationToken ct = default)
     {
-        // 挑图→EBS 回传接口未到位，沿用占位实现。
+        // 挑图→EBS 回传接口未到位（客户端已拦截该动作，正常不会到这里）。
         if (flow != FlowType.Pricing)
-            return await _fake.SubmitAsync(flow, employeeId, rows, ct);
+            throw new NotSupportedException("挑图回传接口未接入");
 
         if (rows.Count == 0) return Array.Empty<SubmitRowResult>();
 
@@ -98,9 +96,6 @@ public sealed class SrmSubmitSink : ISubmitSink
             return new SubmitRowResult { RowKey = r.RowKey, Success = success, Message = remark };
         }).ToList();
     }
-
-    /// <summary>真实回传不做随机整批失败模拟（占位演示用），始终 false。整批故障靠 SubmitAsync 抛异常表达。</summary>
-    public bool ShouldFailBatch() => false;
 
     private static string? Str(JsonElement obj, string name)
     {

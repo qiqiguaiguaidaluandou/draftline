@@ -332,21 +332,8 @@ public static class ApiEndpoints
                 });
             }
 
-            // 瞬时整批失败（ShouldFailBatch 模拟，或下方 SubmitAsync 抛 HTTP/解析异常）→ 不置 Done，可重试。
+            // 瞬时整批失败（SubmitAsync 抛 HTTP/解析异常）→ 不置 Done，可重试。
             IReadOnlyList<SubmitRowResult> rowResults;
-            if (sink.ShouldFailBatch())
-            {
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
-                    ImpactCount = 0, Status = "Failed",
-                    Payload = $"Target: {target}{retryTag}, 整批回传失败（可重试）",
-                    ClientIp = Ip(ctx), Timestamp = DateTime.UtcNow,
-                });
-                await db.SaveChangesAsync(ct);
-                return Results.Json(new SubmitResult { Success = false, Message = $"回传 {target} 失败，批次未完成，可重试。" });
-            }
-
             try
             {
                 rowResults = await sink.SubmitAsync(req.Flow, empId, req.Rows, ct);
@@ -420,22 +407,26 @@ public static class ApiEndpoints
             registry.AuditId = auditId;
             registry.LastModified = DateTime.UtcNow;
 
-            db.ActivityLogs.Add(new ActivityLog
+            // 成功日志仅当确有成功行才写：全失败时只保留上面的失败日志，避免"成功0行+失败"两条并存。
+            if (successCount > 0)
             {
-                Action = "Submit",
-                EmployeeId = empId,
-                Flow = req.Flow,
-                GroupName = req.GroupName,
-                BatchId = req.BatchKey,
-                ImpactCount = successCount,
-                Status = "Success",
-                WindowStart = req.WindowStart.ToUniversalTime(),
-                WindowEnd = req.WindowEnd.ToUniversalTime(),
-                AuditId = auditId,
-                Payload = $"Target: {target}{retryTag}",
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+                db.ActivityLogs.Add(new ActivityLog
+                {
+                    Action = "Submit",
+                    EmployeeId = empId,
+                    Flow = req.Flow,
+                    GroupName = req.GroupName,
+                    BatchId = req.BatchKey,
+                    ImpactCount = successCount,
+                    Status = "Success",
+                    WindowStart = req.WindowStart.ToUniversalTime(),
+                    WindowEnd = req.WindowEnd.ToUniversalTime(),
+                    AuditId = auditId,
+                    Payload = $"Target: {target}{retryTag}",
+                    ClientIp = Ip(ctx),
+                    Timestamp = DateTime.UtcNow
+                });
+            }
 
             await db.SaveChangesAsync(ct);
 

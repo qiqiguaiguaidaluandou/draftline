@@ -1,10 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <!--
-    Draftline.Gateway —— 无状态取数/回传网关（骨架）。
-    带工号调 EBS/PLM 取数、调 SRM/EBS 回传、配置下发、回传审计——本期外部接口未到位，
-    防腐层用 FakeDataSource 顶替（移植自客户端 Mock 的确定性造数）。
-    真接口到位后，只换 AntiCorruption/ 里 IEbsPlmSource/ISubmitSink 的实现（路线图 B1/B2），端点/客户端不动。
+    Draftline.Gateway —— 无状态取数/回传网关。
+    带工号调 EBS/PLM 取数、调 SRM 回传、配置下发、回传审计。
+    防腐层 AntiCorruption/ 里 IEbsPlmSource(EbsPlmSource+PlmClient) / ISubmitSink(SrmSubmitSink) 均为真实接口实现。
+    挑图→EBS 回传接口尚未提供（客户端已拦截该动作）。
     只引用 Draftline.Core（契约/模型/字段schema），不引用 Draftline.Infrastructure（避免拖入 ClosedXML/本地存储）。
   -->
   <PropertyGroup>

@@ -31,14 +31,6 @@
             <TextBlock Text="{Binding LocalRoot}" FontFamily="Consolas" VerticalAlignment="Center" />
           </DockPanel>
           <DockPanel Margin="0,5">
-            <TextBlock DockPanel.Dock="Left" Text="后端网关地址：" Foreground="{StaticResource TextMuted}" Width="170" />
-            <TextBlock Text="{Binding GatewayUrl}" FontFamily="Consolas" />
-          </DockPanel>
-          <DockPanel Margin="0,5">
-            <TextBlock DockPanel.Dock="Left" Text="图纸查看：" Foreground="{StaticResource TextMuted}" Width="170" />
-            <TextBlock Text="到本地批次文件夹自行用本机软件打开（软件不内嵌看图，PDF/STEP 走系统默认关联）" TextWrapping="Wrap" />
-          </DockPanel>
-          <DockPanel Margin="0,5">
             <TextBlock DockPanel.Dock="Left" Text="客户端版本：" Foreground="{StaticResource TextMuted}" Width="170" />
             <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding CheckUpdateCommand}">
               <StackPanel Orientation="Horizontal">

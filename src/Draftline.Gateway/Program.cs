@@ -23,10 +23,6 @@ var conn = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<DraftlineDbContext>(options => options.UseNpgsql(conn));
 
 // ---------- 选项（来自 appsettings） ----------
-var fake = new FakeOptions();
-builder.Configuration.GetSection("Fake").Bind(fake);
-builder.Services.AddSingleton(fake);
-
 var configOptions = new ConfigStoreOptions();
 builder.Configuration.GetSection("Config").Bind(configOptions);
 builder.Services.AddSingleton(configOptions);
@@ -74,39 +70,29 @@ builder.Services.AddSingleton<IConfigStore, InMemoryConfigStore>();
 builder.Services.AddScoped<IAuditStore, PgAuditStore>();
 builder.Services.AddScoped<IOperationLogStore, PgOperationLogStore>();
 
-// ---------- 后台采集服务 (模拟主动获取) ----------
+// ---------- 后台采集服务（按计划主动取数） ----------
 builder.Services.AddHostedService<DataIngestionService>();
 
-// ---------- 防腐层接缝 ----------
-// EBS 取数：Ebs:Enabled=true 走真实接口(EbsPlmSource)，否则继续用 FakeDataSource 造数。
+// ---------- 防腐层接缝（均为真实接口，无假数据回退） ----------
+// EBS 取数（EbsPlmSource）+ PLM 富化（变更状态 + 图纸下载），鉴权复用 EbsTokenProvider。
+// URL 留空则对应调用在运行时报错并按计划重采；不会造假数据。
 var ebsOptions = new EbsOptions();
 builder.Configuration.GetSection("Ebs").Bind(ebsOptions);
 builder.Services.AddSingleton(ebsOptions);
 builder.Services.AddSingleton<EbsTokenProvider>();
 
-builder.Services.AddSingleton<FakeDataSource>();
+var plmOptions = new PlmOptions();
+builder.Configuration.GetSection("Plm").Bind(plmOptions);
+builder.Services.AddSingleton(plmOptions);
+builder.Services.AddHttpClient<PlmClient>();
+builder.Services.AddHttpClient<IEbsPlmSource, EbsPlmSource>();
 
-// 回传(路线图 B2)：Srm:Enabled=true 时核价价格走真实 SRM 接口(SrmSubmitSink)，
-// 挑图→EBS 回传接口未提供，那一支仍由 FakeDataSource 顶替（SrmSubmitSink 内部委托）。
+// 回传：核价价格 → SRM（SrmSubmitSink）。挑图 → EBS 回传接口尚未提供，
+// 客户端已拦截该动作；服务端那一支若被触达会抛「未接入」。
 var srmOptions = new SrmOptions();
 builder.Configuration.GetSection("Srm").Bind(srmOptions);
 builder.Services.AddSingleton(srmOptions);
-if (srmOptions.Enabled)
-    builder.Services.AddHttpClient<ISubmitSink, SrmSubmitSink>();
-else
-    builder.Services.AddSingleton<ISubmitSink>(sp => sp.GetRequiredService<FakeDataSource>());
-
-if (ebsOptions.Enabled)
-{
-    // PLM 富化（变更状态 + 图纸下载），鉴权复用 EBS 的 EbsTokenProvider。URL 留空则对应步骤跳过。
-    var plmOptions = new PlmOptions();
-    builder.Configuration.GetSection("Plm").Bind(plmOptions);
-    builder.Services.AddSingleton(plmOptions);
-    builder.Services.AddHttpClient<PlmClient>();
-    builder.Services.AddHttpClient<IEbsPlmSource, EbsPlmSource>();
-}
-else
-    builder.Services.AddSingleton<IEbsPlmSource>(sp => sp.GetRequiredService<FakeDataSource>());
+builder.Services.AddHttpClient<ISubmitSink, SrmSubmitSink>();
 
 var app = builder.Build();
 
