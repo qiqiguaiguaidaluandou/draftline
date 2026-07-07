@@ -5,6 +5,7 @@ using Draftline.App.Services;
 using Draftline.Core.Contracts;
 using Draftline.Core.Enums;
 using Draftline.Core.Models;
+using Draftline.Infrastructure.Options;
 
 namespace Draftline.App.ViewModels;
 
@@ -20,7 +21,8 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
     private readonly FlowType _flow;
 
     public ExceptionPoolViewModel(
-        ILocalBatchStore store, ISession session, IExplorerService explorer, INavigationService nav, FlowType flow)
+        ILocalBatchStore store, ISession session, IExplorerService explorer, INavigationService nav,
+        LocalStorageOptions storage, FlowType flow)
     {
         _store = store;
         _session = session;
@@ -29,7 +31,7 @@ public sealed partial class ExceptionPoolViewModel : ViewModelBase
         _flow = flow;
 
         Title = $"{(flow == FlowType.Pricing ? "图纸核价" : "挑图纸")} · 异常待跟进";
-        PoolPath = LocalPaths.LocalExceptionPoolRoot(session.Config.LocalRoot, flow);
+        PoolPath = LocalPaths.LocalExceptionPoolRoot(storage.Root, flow);
     }
 
     public string PoolPath { get; }

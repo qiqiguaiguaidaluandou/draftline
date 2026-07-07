@@ -1,4 +1,3 @@
-using System.IO;
 using Draftline.Core.Models;
 using Draftline.Core.Schemas;
 
@@ -14,10 +13,7 @@ public sealed class InMemoryConfigStore : IConfigStore
 
     public ClientConfig Get(string employeeId) => new()
     {
-        // 强制标准化：下发给客户端的路径固定为"我的文档\Draftline_Data"。
-        // 注意：由于后端运行在 Linux 服务器上，此处的 Environment 路径逻辑主要确保契约一致性，
-        // 客户端在接收到 ClientConfig 后若仍需覆盖，以客户端 App.xaml.cs 逻辑为准。
-        LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Draftline_Data"),
+        // 本地数据根不下发：那是客户端本机的事，由客户端 App.xaml.cs 决定（详见 ClientConfig 注释）。
         GatewayBaseUrl = _options.GatewayBaseUrl,
         PricingWindows = CollectionSchedules.Pricing,
         DrawingSelectionWindows = CollectionSchedules.DrawingSelection,

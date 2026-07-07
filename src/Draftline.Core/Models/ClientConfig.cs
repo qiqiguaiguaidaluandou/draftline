@@ -8,9 +8,8 @@ namespace Draftline.Core.Models;
 /// </summary>
 public sealed class ClientConfig
 {
-    /// <summary>本地数据根目录（如 D:\Draftline_Data）。
-    /// 可写：客户端登录后以本机路径覆盖后端下发值（后端在 Linux 上算出的路径对客户端无意义）。</summary>
-    public required string LocalRoot { get; set; }
+    // 注意：本地数据根(LocalRoot)不在下发契约中——它是纯客户端概念，由客户端 App 启动时的
+    // LocalStorageOptions(我的文档\Draftline_Data)自行决定，后端无从、也不应替客户端指定本机路径。
 
     /// <summary>后端无状态网关地址（取数 / 回传 / 认证）。</summary>
     public string GatewayBaseUrl { get; init; } = "http://localhost:8080";

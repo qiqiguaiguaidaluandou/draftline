@@ -7,6 +7,7 @@ using Draftline.App.Services;
 using Draftline.Core.Contracts;
 using Draftline.Core.Enums;
 using Draftline.Core.Models;
+using Draftline.Infrastructure.Options;
 using Draftline.Infrastructure.Sync;
 
 namespace Draftline.App.ViewModels;
@@ -33,7 +34,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
     public BatchListViewModel(
         ILocalBatchStore store, BatchSyncService sync, ISession session,
         INavigationService nav, IDialogService dialog, IExplorerService explorer,
-        FlowType flow, BatchLocation location)
+        LocalStorageOptions storage, FlowType flow, BatchLocation location)
     {
         _store = store;
         _sync = sync;
@@ -48,7 +49,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
         var locName = location == BatchLocation.Todo ? "待处理" : "已处理";
         Title = $"{flowName} · {locName}";
         IsTodo = location == BatchLocation.Todo;
-        LocationRootPath = LocalPaths.LocalLocationRoot(_session.Config.LocalRoot, flow, location);
+        LocationRootPath = LocalPaths.LocalLocationRoot(storage.Root, flow, location);
         StartWatching();
     }
 

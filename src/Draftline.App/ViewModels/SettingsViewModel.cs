@@ -1,6 +1,7 @@
 using System.Reflection;
 using CommunityToolkit.Mvvm.Input;
 using Draftline.App.Services;
+using Draftline.Infrastructure.Options;
 
 namespace Draftline.App.ViewModels;
 
@@ -13,7 +14,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly IDialogService _dialog;
     private readonly IUpdateService _update;
 
-    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog, IUpdateService update)
+    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog, IUpdateService update, LocalStorageOptions storage)
     {
         _explorer = explorer;
         _dialog = dialog;
@@ -22,7 +23,7 @@ public sealed partial class SettingsViewModel : ViewModelBase
         Title = "设置";
         var op = session.Operator;
         OperatorText = $"{op.DisplayName} · 工号 {op.EmployeeId} · {op.Department} / {op.Position}";
-        LocalRoot = session.Config.LocalRoot;
+        LocalRoot = storage.Root;
         GatewayUrl = session.Config.GatewayBaseUrl;
         Version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "0.1.0";
     }
