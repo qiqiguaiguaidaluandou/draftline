@@ -39,16 +39,20 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="appsettings.json">
+    <!-- 用 Content(而非 None)确保配置文件被 ClickOnce 收进 Application Files 清单。
+         None+CopyToOutputDirectory 只拷到 bin，未必进 ClickOnce 包，导致客户端拿不到
+         配置、退回代码默认值 http://localhost:8080 → "无法连接服务器"。 -->
+    <None Remove="appsettings.json" />
+    <None Remove="appsettings.local.json" />
+    <Content Include="appsettings.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
-    <!-- 发包机上的 appsettings.local.json 也一起打进 ClickOnce 包。
-         客户端加载顺序 json→local，local 覆盖 json，故生产地址写在发包机的 .local 即可
-         （json 里保留 localhost 供开发/CI）。文件不存在时此项静默跳过，不会中断编译。
-         注意：.local 被 gitignore，只有装了它的发包机 publish 出来才带；CI/干净克隆不带。 -->
-    <None Update="appsettings.local.json" Condition="Exists('appsettings.local.json')">
+    </Content>
+    <!-- 发包机上的 .local 一起进包；客户端加载顺序 json→local、local 覆盖 json，
+         故生产地址写在发包机的 .local 即可。文件不存在时静默跳过，不中断编译。
+         注意：.local 被 gitignore，只有装了它的发包机 publish 才带；CI/干净克隆不带。 -->
+    <Content Include="appsettings.local.json" Condition="Exists('appsettings.local.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
   </ItemGroup>
 
 </Project>
