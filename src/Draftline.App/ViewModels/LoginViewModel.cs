@@ -62,10 +62,14 @@ public sealed partial class LoginViewModel : ObservableObject
                 return;
             }
 
-            // 取下发配置，应用字段集与本地根（字段配置化在此生效）。
+            // 取下发配置，应用字段集。
+            // 本地数据根必须由客户端决定：后端跑在 Linux 服务器上，其下发的 LocalRoot
+            // 会是 /home/xxx/文档/… ，对 Windows 客户端无意义、无法在资源管理器打开。
+            // 用客户端启动时算好的 _storage.Root（我的文档\data）覆盖下发值，保证 Batch.FolderPath、
+            // LocationRootPath、PoolPath 等全部基于本机真实路径。
             var config = await _config.GetConfigAsync(auth.Operator.EmployeeId);
+            config.LocalRoot = _storage.Root;
             _fieldProvider.Apply(config);
-            _storage.Root = config.LocalRoot;
             _session.SignIn(auth.Operator, config, auth.MustChangePassword);
 
             LoginSucceeded?.Invoke(this, EventArgs.Empty);

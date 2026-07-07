@@ -34,8 +34,9 @@ public partial class App : Application
         var http = new HttpOptions();
         config.GetSection("Http").Bind(http);
 
-        // 强制标准化：数据文件夹固定在"我的文档\data"，不再受配置文件影响
-        http.LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "data");
+        // 强制标准化：数据文件夹固定在"我的文档\Draftline_Data"，不再受配置文件影响。
+        // 这是本地数据根的唯一真源，登录后由 LoginViewModel 用它覆盖后端下发的 LocalRoot。
+        http.LocalRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Draftline_Data");
 
         services.AddDraftlineHttpInfrastructure(http);
 
