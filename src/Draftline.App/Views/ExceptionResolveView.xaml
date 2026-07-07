@@ -55,7 +55,10 @@
         <StackPanel DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0">
           <TextBlock TextTrimming="CharacterEllipsis">
             <Run Text="来源批次：" Foreground="{StaticResource TextMuted}" /><Run Text="{Binding SourceBatchText, Mode=OneWay}" FontWeight="SemiBold" />
-            <Run Text="    异常原因：" Foreground="{StaticResource TextMuted}" /><Run Text="{Binding ReasonText, Mode=OneWay}" Foreground="{StaticResource Orange}" />
+          </TextBlock>
+          <!-- 异常原因单独一行、自动换行完整显示（原因可能较长，之前与来源批次同排被省略号截断）。 -->
+          <TextBlock Margin="0,4,0,0" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left">
+            <Run Text="异常原因：" Foreground="{StaticResource TextMuted}" /><Run Text="{Binding ReasonText, Mode=OneWay}" Foreground="{StaticResource Orange}" />
           </TextBlock>
           <TextBlock Text="{Binding GateText}" Foreground="{StaticResource TextMuted}" FontSize="12" Margin="0,4,0,0" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
         </StackPanel>
