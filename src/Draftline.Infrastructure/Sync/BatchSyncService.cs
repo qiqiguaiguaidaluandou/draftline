@@ -27,15 +27,26 @@ public sealed class BatchSyncService
     /// 全量镜像同步：
     /// 1. 拉取服务器 Catalog，补齐本地缺失文件或更新已变动文件。
     /// 2. 状态联动：如果服务器状态与本地位置不一致（如云端变 Done），则移动本地目录。
-    /// 3. 异常池联动：全量覆盖本地异常池。
+    /// 3. 镜像删除：本地存在、但 Catalog 已无（含被服务器过期清理掉）的批次 → 删本地目录，保持"本地=云端"。
+    /// 4. 异常池联动：全量覆盖本地异常池。
     /// </summary>
-    public async Task<BatchSyncResult> MirrorSyncAsync(string employeeId, CancellationToken ct = default)
+    /// <param name="allowedFlows">
+    /// 镜像删除的作用范围：仅在操作员有权限的流程内清理本地孤儿批次。
+    /// 传空集合（如无任何授权）时不删除任何本地数据，避免误删。
+    /// </param>
+    public async Task<BatchSyncResult> MirrorSyncAsync(string employeeId, IReadOnlyCollection<FlowType> allowedFlows, CancellationToken ct = default)
     {
         var result = new BatchSyncResult();
         var localRoot = _store.Root;
 
         // 1. 同步批次
         var catalog = await _data.GetCatalogAsync(ct);
+
+        // 云端现存批次的键集（流程+组+批次），用于第 3 步镜像删除的判定。
+        var catalogKeys = catalog
+            .Select(i => BatchKey(i.Flow, i.GroupName, i.BatchId))
+            .ToHashSet();
+
         foreach (var item in catalog)
         {
             ct.ThrowIfCancellationRequested();
@@ -114,7 +125,39 @@ public sealed class BatchSyncService
             }
         }
 
-        // 2. 同步异常池 (按流程归类镜像)
+        // 2. 镜像删除（prune）：本地有、但云端 catalog 已无的批次 → 删本地目录。
+        //    覆盖"服务器过期清理后本地也应消失"的诉求（服务器 Done 15 天 / Todo 30 天到期删除后，
+        //    对应批次不再出现在 catalog，这里据此删本地）。
+        //    · 只按键 (流程+组+批次) 匹配、忽略位置：凡云端仍存在的批次绝不会被删（安全）。
+        //    · 只清 allowedFlows 内的流程：无授权则 allowedFlows 为空 → 不动任何本地数据。
+        //    · catalog 拉取失败会在上面 GetCatalogAsync 处抛出、根本走不到这里，故不会因网络抖动误删。
+        foreach (var flow in allowedFlows.Distinct())
+        {
+            foreach (var location in new[] { BatchLocation.Todo, BatchLocation.Done })
+            {
+                var locationRoot = LocalPaths.LocalLocationRoot(localRoot, flow, location);
+                if (!Directory.Exists(locationRoot)) continue;
+
+                foreach (var (groupName, batchDir) in EnumerateLocalBatchDirs(locationRoot))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var batchId = Path.GetFileName(batchDir);
+                    if (catalogKeys.Contains(BatchKey(flow, groupName, batchId))) continue; // 云端还在 → 保留
+
+                    try
+                    {
+                        Directory.Delete(batchDir, recursive: true);
+                        result.Pruned++;
+                    }
+                    catch
+                    {
+                        result.Failed++;
+                    }
+                }
+            }
+        }
+
+        // 3. 同步异常池 (按流程归类镜像)
         var allExceptions = await _data.GetExceptionsAsync(ct);
         
         // 分组处理：确保核价的异常去核价文件夹，挑图的异常去挑图文件夹
@@ -136,6 +179,23 @@ public sealed class BatchSyncService
         }
 
         return result;
+    }
+
+    /// <summary>镜像删除的批次唯一键：流程 + 组 + 批次号（与位置无关）。</summary>
+    private static string BatchKey(FlowType flow, string groupName, string batchId) => $"{flow}|{groupName}|{batchId}";
+
+    /// <summary>
+    /// 枚举某"位置根"（如 核价/待处理）下的本地批次目录，返回 (组名, 批次目录全路径)。
+    /// 目录层级固定为 位置/组/批次（挑图组名恒为 "Center"，核价为组名），故取两层。
+    /// </summary>
+    private static IEnumerable<(string GroupName, string BatchDir)> EnumerateLocalBatchDirs(string locationRoot)
+    {
+        foreach (var groupDir in Directory.GetDirectories(locationRoot))
+        {
+            var groupName = Path.GetFileName(groupDir);
+            foreach (var batchDir in Directory.GetDirectories(groupDir))
+                yield return (groupName, batchDir);
+        }
     }
 
     /// <summary>
@@ -165,6 +225,9 @@ public sealed class BatchSyncResult
     public int SkippedLocal { get; set; }
     public int SkippedAudit { get; set; }
     public int Failed { get; set; }
+
+    /// <summary>本轮镜像删除掉的本地孤儿批次数（云端已无 → 删本地）。</summary>
+    public int Pruned { get; set; }
 
     public int Fetched => NewBatches.Count;
 }

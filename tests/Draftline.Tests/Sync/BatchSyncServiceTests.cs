@@ -40,7 +40,7 @@ public class BatchSyncServiceTests
             }
         });
 
-        var result = await svc.MirrorSyncAsync(Emp);
+        var result = await svc.MirrorSyncAsync(Emp, Array.Empty<FlowType>());
 
         Assert.Equal(1, result.Fetched);
         Assert.Equal(batchId, result.NewBatches[0].FolderName);
@@ -63,8 +63,44 @@ public class BatchSyncServiceTests
             LastModified = oldDate
         });
 
-        var result = await svc.MirrorSyncAsync(Emp);
+        var result = await svc.MirrorSyncAsync(Emp, Array.Empty<FlowType>());
 
         Assert.Equal(0, result.Fetched); // 超过 15 天的 Done 不同步
+    }
+
+    [Fact]
+    public async Task MirrorSync_prunes_local_batch_absent_from_catalog()
+    {
+        var (svc, store, data, _) = Build();
+        var root = TempDir.Create();
+        try
+        {
+            store.Root = root;
+
+            // 本地预置一个已同步下来的批次目录，但服务器 catalog 已无（模拟被过期清理）。
+            var staleBatchId = LocalPaths.BatchFolderName(DateTime.Now.AddHours(-2), DateTime.Now.AddHours(-1));
+            var staleDir = LocalPaths.LocalBatchDir(root, FlowType.Pricing, BatchLocation.Todo, "Group1", staleBatchId);
+            Directory.CreateDirectory(staleDir);
+
+            // 另置一个云端仍存在的批次目录，验证不会被误删。
+            var keepBatchId = LocalPaths.BatchFolderName(DateTime.Now.AddMinutes(-30), DateTime.Now);
+            var keepDir = LocalPaths.LocalBatchDir(root, FlowType.Pricing, BatchLocation.Todo, "Group1", keepBatchId);
+            Directory.CreateDirectory(keepDir);
+            data.Catalog.Add(new BatchCatalogItem
+            {
+                BatchId = keepBatchId,
+                Flow = FlowType.Pricing,
+                GroupName = "Group1",
+                Status = BatchLocation.Todo,
+                LastModified = DateTime.Now
+            });
+
+            var result = await svc.MirrorSyncAsync(Emp, new[] { FlowType.Pricing });
+
+            Assert.False(Directory.Exists(staleDir)); // 云端已无 → 本地删除
+            Assert.True(Directory.Exists(keepDir));    // 云端仍在 → 本地保留
+            Assert.Equal(1, result.Pruned);
+        }
+        finally { TempDir.Delete(root); }
     }
 }

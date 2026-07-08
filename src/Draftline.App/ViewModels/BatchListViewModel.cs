@@ -99,7 +99,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
         try
         {
             // --- New Architecture: Pure Mirror Refresh ---
-            await _sync.MirrorSyncAsync(_session.Operator.EmployeeId);
+            await _sync.MirrorSyncAsync(_session.Operator.EmployeeId, _session.Operator.AllowedFlows);
             await LoadAsync();
             _dialog.Info("同步数据完成。");
         }

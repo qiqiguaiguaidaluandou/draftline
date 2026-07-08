@@ -41,7 +41,7 @@ internal sealed class FakeLocalBatchStore : ILocalBatchStore
     public Task<IReadOnlyList<ExceptionItem>> ListExceptionsAsync(FlowType flow, string employeeId, CancellationToken ct = default) => throw new NotSupportedException();
     public Task RemoveExceptionAsync(FlowType flow, string employeeId, string sourceBatch, string rowKey, CancellationToken ct = default) => throw new NotSupportedException();
 
-    public string Root => "(fake-root)";
+    public string Root { get; set; } = "(fake-root)";
 
     public Task EnsureBatchFolderAsync(FlowType flow, string groupName, string batchId, BatchLocation location, CancellationToken ct = default) => Task.CompletedTask;
     public Task WriteSyncFileAsync(FlowType flow, string groupName, string batchId, BatchLocation location, string fileName, byte[] content, CancellationToken ct = default) => Task.CompletedTask;

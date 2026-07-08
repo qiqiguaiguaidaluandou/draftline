@@ -35,6 +35,8 @@ public sealed class DataIngestionService : BackgroundService
 
         // 启动先清一次过期批次；采集本身由下面的循环按排程触发（含重启后补采）。
         await CleanupOldBatchesAsync(stoppingToken);
+        var lastCleanup = DateTime.UtcNow;
+        var cleanupInterval = TimeSpan.FromHours(6); // 每 6 小时清理一次（一天约 4 次）；过期判定按天，无需更频繁。
 
         // 每 5 分钟检查一次排程：到点而未采的批次就采（已采的会跳过，不重复调接口）。
         while (!stoppingToken.IsCancellationRequested)
@@ -43,10 +45,13 @@ public sealed class DataIngestionService : BackgroundService
             {
                 await CheckSchedulesAsync(stoppingToken);
 
-                // 周期性清理（每小时执行一次，跟随时钟）
-                if (DateTime.Now.Minute % 60 == 0)
+                // 周期性清理：以"距上次清理已满 cleanupInterval"为准触发。
+                // 旧写法 `DateTime.Now.Minute % 60 == 0`（即 Minute==0）依赖 5 分钟 tick 恰好落在整点分钟，
+                // 而 Task.Delay 会漂移、不对齐时钟，某些启动时刻会长期错过 minute==0 → 清理一直不触发。
+                if (DateTime.UtcNow - lastCleanup >= cleanupInterval)
                 {
                     await CleanupOldBatchesAsync(stoppingToken);
+                    lastCleanup = DateTime.UtcNow;
                 }
             }
             catch (Exception ex)

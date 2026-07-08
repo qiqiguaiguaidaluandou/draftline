@@ -52,11 +52,14 @@ public sealed class SessionSyncScheduler
             // --- New Architecture: Pure Mirror Sync ---
             // 客户端不再主动计算缺失窗口并触发 /fetch。
             // 它的职责仅限于同步服务器上已经存在的批次、状态和异常。
-            var result = await _sync.MirrorSyncAsync(emp);
+            var result = await _sync.MirrorSyncAsync(emp, _session.Operator.AllowedFlows);
 
-            if (result.Fetched > 0)
+            if (result.Fetched > 0 || result.Pruned > 0)
             {
-                _dialog.Info($"云端同步：新增 {result.Fetched} 个批次已到达。");
+                var parts = new List<string>();
+                if (result.Fetched > 0) parts.Add($"新增 {result.Fetched} 个批次");
+                if (result.Pruned > 0) parts.Add($"移除 {result.Pruned} 个已过期批次");
+                _dialog.Info("云端同步：" + string.Join("，", parts) + "。");
             }
         }
         catch (Exception ex)
