@@ -21,6 +21,11 @@ public sealed class DataIngestionService : BackgroundService
     private readonly IConfiguration _config;
     private readonly EbsOptions _ebs;
 
+    // 各窗口连续失败轮数（键 = "flow:batchId"）：识别"疑似永久坏窗"并升级告警。
+    // BackgroundService 单例、执行循环单线程，无并发访问；键在窗口采成功时移除，故不会泄漏。
+    private readonly Dictionary<string, int> _failStreak = new();
+    private const int StuckWindowRounds = 6; // 连续 6 轮（约 30 分钟）仍失败 → 视为疑似永久坏窗。
+
     public DataIngestionService(IServiceProvider sp, ILogger<DataIngestionService> logger, IConfiguration config, EbsOptions ebs)
     {
         _sp = sp;
@@ -140,50 +145,75 @@ public sealed class DataIngestionService : BackgroundService
     {
         var now = SchedulingNow();
         // 回看日历天数（含今天）。默认 2 = 昨天+今天，对齐现状；宕机久了可临时调大再重启补更久历史。
-        var horizonDays = _config.GetValue<int>("Ingestion:MaxCatchupDays", 2);
+        // 该值同时是"每轮回看范围"（锚在 now）与"追赶上限"——二者是同一枚举动作的两面（见 docs/changes/023）。
+        // clamp 下限为 1：若误配为 0/负数，Plan 会枚举不到任何窗口 → 静默停采。
+        var horizonDays = Math.Max(1, _config.GetValue<int>("Ingestion:MaxCatchupDays", 2));
 
         foreach (var flow in new[] { FlowType.Pricing, FlowType.DrawingSelection })
         {
             if (ct.IsCancellationRequested) return;
-
-            // 期望组别：与 IngestWindowAsync 内一致（单一来源）。核价固定配置组，挑图不分组只有 Center。
-            var expectedGroups = flow == FlowType.Pricing ? _ebs.PricingGroups : new[] { "Center" };
-
-            DateTime? tCovered;
-            using (var scope = _sp.CreateScope())
+            try
             {
+                await IngestFlowAsync(flow, now, horizonDays, ct);
+            }
+            catch (Exception ex)
+            {
+                // 每流程隔离：算高水位/规划阶段的异常只跳过本流程本轮，不连累另一流程（下轮重试）。
+                _logger.LogError(ex, "流程 {Flow} 本轮采集调度失败（跳过本流程，下轮重试）。", flow);
+            }
+        }
+    }
+
+    /// <summary>处理单个流程一轮：算 T_covered → 规划 → 逐窗取数（某窗失败即就地停止本流程本轮，不越过留洞）。</summary>
+    private async Task IngestFlowAsync(FlowType flow, DateTime now, int horizonDays, CancellationToken ct)
+    {
+        // 期望组别：与 IngestWindowAsync 内一致（单一来源）。核价固定配置组，挑图不分组只有 Center。
+        var expectedGroups = flow == FlowType.Pricing ? _ebs.PricingGroups : new[] { "Center" };
+
+        DateTime? tCovered;
+        using (var scope = _sp.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
+            tCovered = await ComputeTCoveredAsync(db, flow, expectedGroups, ct);
+        }
+
+        var plan = IngestionPlanner.Plan(now, tCovered, horizonDays, IngestionSchedules.For(flow));
+
+        // 追赶超上限留痕：已有高水位、但本轮起点晚于"接续点"，说明超过 horizon 的更久远数据被跳过（不补）。
+        if (tCovered is DateTime behind && plan.Count > 0 && plan[0].EffStart > behind.AddMinutes(1))
+        {
+            _logger.LogWarning(
+                "追赶超上限({Cap}天)：{Flow} 已覆盖到 {Covered:yyyy-MM-dd HH:mm}，本轮从 {From:yyyy-MM-dd HH:mm} 起补，" +
+                "跳过 {GapStart:yyyy-MM-dd HH:mm}~{GapEnd:yyyy-MM-dd HH:mm} 的更久远数据（不补；如需补请临时调大 Ingestion:MaxCatchupDays 再重启，也可能是排程平铺存在缺口）。",
+                horizonDays, flow, behind, plan[0].EffStart, behind.AddMinutes(1), plan[0].EffStart.AddMinutes(-1));
+        }
+
+        foreach (var w in plan)
+        {
+            if (ct.IsCancellationRequested) return;
+            var key = $"{flow}:{LocalPaths.BatchFolderName(w.EffStart, w.WindowEnd)}";
+            try
+            {
+                using var scope = _sp.CreateScope();
                 var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
-                tCovered = await ComputeTCoveredAsync(db, flow, expectedGroups, ct);
+                var source = scope.ServiceProvider.GetRequiredService<IEbsPlmSource>();
+                var store = scope.ServiceProvider.GetRequiredService<IServerBatchStore>();
+                await IngestWindowAsync(db, source, store, flow, w.EffStart, w.WindowEnd, ct);
+                _failStreak.Remove(key); // 成功即清零该窗失败计数
             }
-
-            var plan = IngestionPlanner.Plan(now, tCovered, horizonDays, IngestionSchedules.For(flow));
-
-            // 追赶超上限留痕：已有高水位、但本轮起点晚于"接续点"，说明超过 horizon 的更久远数据被跳过（不补）。
-            if (tCovered is DateTime behind && plan.Count > 0 && plan[0].EffStart > behind.AddMinutes(1))
+            catch (Exception ex)
             {
-                _logger.LogWarning(
-                    "追赶超上限({Cap}天)：{Flow} 已覆盖到 {Covered:yyyy-MM-dd HH:mm}，本轮从 {From:yyyy-MM-dd HH:mm} 起补，" +
-                    "跳过 {GapStart:yyyy-MM-dd HH:mm}~{GapEnd:yyyy-MM-dd HH:mm} 的更久远数据（不补，如需补请临时调大 Ingestion:MaxCatchupDays 再重启）。",
-                    horizonDays, flow, behind, plan[0].EffStart, behind.AddMinutes(1), plan[0].EffStart.AddMinutes(-1));
-            }
-
-            foreach (var w in plan)
-            {
-                if (ct.IsCancellationRequested) return;
-                try
-                {
-                    using var scope = _sp.CreateScope();
-                    var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
-                    var source = scope.ServiceProvider.GetRequiredService<IEbsPlmSource>();
-                    var store = scope.ServiceProvider.GetRequiredService<IServerBatchStore>();
-                    await IngestWindowAsync(db, source, store, flow, w.EffStart, w.WindowEnd, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "采集失败：{Flow} 窗口 {Start:yyyy-MM-dd HH:mm}~{End:yyyy-MM-dd HH:mm}（本流程本轮停在此，下轮重试）",
-                        flow, w.EffStart, w.WindowEnd);
-                    break; // 停在失败窗口，避免 T_covered 越过留洞
-                }
+                var streak = _failStreak[key] = _failStreak.GetValueOrDefault(key) + 1;
+                if (streak >= StuckWindowRounds)
+                    _logger.LogError(ex,
+                        "⚠ 疑似永久坏窗：{Flow} 窗口 {Start:yyyy-MM-dd HH:mm}~{End:yyyy-MM-dd HH:mm} 已连续 {Streak} 轮失败，" +
+                        "该流程更晚的数据被阻塞，请人工排查（EBS/网络/该时段数据）。",
+                        flow, w.EffStart, w.WindowEnd, streak);
+                else
+                    _logger.LogError(ex,
+                        "采集失败：{Flow} 窗口 {Start:yyyy-MM-dd HH:mm}~{End:yyyy-MM-dd HH:mm}（第 {Streak} 轮，本流程本轮停在此，下轮重试）",
+                        flow, w.EffStart, w.WindowEnd, streak);
+                break; // 停在失败窗口，避免 T_covered 越过留洞（队头阻塞是"绝不静默留洞"的代价）
             }
         }
     }

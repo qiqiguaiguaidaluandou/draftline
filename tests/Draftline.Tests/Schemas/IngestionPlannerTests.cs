@@ -148,6 +148,27 @@ public class IngestionPlannerTests
     }
 
     [Fact]
+    public void Horizon_one_looks_at_today_only()
+    {
+        // horizonDays=1 → 只看今天（d=0）；昨天的窗口不进候选。
+        var now = Dt(2026, 5, 28, 17, 0);
+        var tCovered = Dt(2026, 5, 27, 15, 30);
+
+        var plan = IngestionPlanner.Plan(now, tCovered, horizonDays: 1, PricingStd);
+
+        Assert.Equal(2, plan.Count);
+        Assert.All(plan, p => Assert.Equal(new DateOnly(2026, 5, 28), DateOnly.FromDateTime(p.WindowEnd))); // 窗口止都在今天
+    }
+
+    [Fact]
+    public void Horizon_zero_plans_nothing_hence_the_caller_clamps_to_one()
+    {
+        // horizonDays=0 → 枚举不到任何窗口 → 空计划（静默停采）。调用方 CheckSchedulesAsync 因此 clamp 下限为 1。
+        var now = Dt(2026, 5, 28, 17, 0);
+        Assert.Empty(IngestionPlanner.Plan(now, tCovered: null, horizonDays: 0, PricingStd));
+    }
+
+    [Fact]
     public void Windows_before_trigger_time_are_not_planned()
     {
         // 今天 09:00：两批触发点(10:00/16:00)都没到 → 今天不产出；只剩昨天已到点的。
