@@ -112,10 +112,6 @@ public sealed class DataIngestionService : BackgroundService
     // 采集排程的唯一权威定义在 Draftline.Core.Schemas.IngestionSchedules（客户端补拉/后台展示共用同一套）。
 
     /// <summary>
-    /// 检查所有排程：触发时刻已过、且对应批次尚未采集的就采。
-    /// 回看「昨天 + 今天」两天的触发点，以便服务重启后补采错过的批次（已存在的会跳过，不重复调接口）。
-    /// </summary>
-    /// <summary>
     /// 采集排程使用的"当前时间"。配置 `Ingestion:NowOverride`（如 "2026-05-28 17:00:00"）时返回该固定值，
     /// 仅用于**开发期临时**把排程窗口挪到有数据的历史日期来验证全链路。
     /// 只影响排程窗口计算，不动鉴权 JWT、批次清理、各类时间戳（它们仍用真实时间）。
@@ -133,37 +129,75 @@ public sealed class DataIngestionService : BackgroundService
         return DateTime.Now;
     }
 
+    /// <summary>
+    /// 检查所有排程并按「数据时间轴高水位 T_covered」模型取数（见 docs/changes/023）。
+    /// 每流程：先从已登记批次派生 T_covered → 由 <see cref="IngestionPlanner.Plan"/> 算出本轮该采的窗口序列
+    /// （回看 MaxCatchupDays 天、已过"到点 + 未覆盖"两道闸门、按窗口止升序）→ 逐窗取数。
+    /// 取数从 T_covered 之后接续 → 改窗不倒补、切换不丢数；日常/宕机补采均产出标准窗口批次。
+    /// 某窗失败即就地停止本流程本轮（不越过留洞），下一轮以真实 T_covered 重算重试。
+    /// </summary>
     private async Task CheckSchedulesAsync(CancellationToken ct)
     {
         var now = SchedulingNow();
+        // 回看日历天数（含今天）。默认 2 = 昨天+今天，对齐现状；宕机久了可临时调大再重启补更久历史。
+        var horizonDays = _config.GetValue<int>("Ingestion:MaxCatchupDays", 2);
 
-        foreach (var triggerDate in new[] { now.Date.AddDays(-1), now.Date })
+        foreach (var flow in new[] { FlowType.Pricing, FlowType.DrawingSelection })
         {
-            var anchor = DateOnly.FromDateTime(triggerDate);
-            foreach (var s in IngestionSchedules.All)
+            if (ct.IsCancellationRequested) return;
+
+            // 期望组别：与 IngestWindowAsync 内一致（单一来源）。核价固定配置组，挑图不分组只有 Center。
+            var expectedGroups = flow == FlowType.Pricing ? _ebs.PricingGroups : new[] { "Center" };
+
+            DateTime? tCovered;
+            using (var scope = _sp.CreateScope())
+            {
+                var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
+                tCovered = await ComputeTCoveredAsync(db, flow, expectedGroups, ct);
+            }
+
+            var plan = IngestionPlanner.Plan(now, tCovered, horizonDays, IngestionSchedules.For(flow));
+
+            // 追赶超上限留痕：已有高水位、但本轮起点晚于"接续点"，说明超过 horizon 的更久远数据被跳过（不补）。
+            if (tCovered is DateTime behind && plan.Count > 0 && plan[0].EffStart > behind.AddMinutes(1))
+            {
+                _logger.LogWarning(
+                    "追赶超上限({Cap}天)：{Flow} 已覆盖到 {Covered:yyyy-MM-dd HH:mm}，本轮从 {From:yyyy-MM-dd HH:mm} 起补，" +
+                    "跳过 {GapStart:yyyy-MM-dd HH:mm}~{GapEnd:yyyy-MM-dd HH:mm} 的更久远数据（不补，如需补请临时调大 Ingestion:MaxCatchupDays 再重启）。",
+                    horizonDays, flow, behind, plan[0].EffStart, behind.AddMinutes(1), plan[0].EffStart.AddMinutes(-1));
+            }
+
+            foreach (var w in plan)
             {
                 if (ct.IsCancellationRequested) return;
-                if (!s.Enabled) continue;
-
-                var triggerAt = triggerDate.Add(s.TriggerTime.ToTimeSpan());
-                if (now < triggerAt) continue; // 还没到触发时刻 → 不采（避免取到未封口的窗口）
-
-                var (ws, we) = s.ToWindow().Resolve(anchor); // 与客户端补拉同一套解算（窗口止固定在触发当天）
-
                 try
                 {
                     using var scope = _sp.CreateScope();
                     var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
                     var source = scope.ServiceProvider.GetRequiredService<IEbsPlmSource>();
                     var store = scope.ServiceProvider.GetRequiredService<IServerBatchStore>();
-                    await IngestWindowAsync(db, source, store, s.Flow, ws, we, ct);
+                    await IngestWindowAsync(db, source, store, flow, w.EffStart, w.WindowEnd, ct);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "采集失败：{Flow} 窗口 {Start:yyyy-MM-dd HH:mm}~{End:yyyy-MM-dd HH:mm}", s.Flow, ws, we);
+                    _logger.LogError(ex, "采集失败：{Flow} 窗口 {Start:yyyy-MM-dd HH:mm}~{End:yyyy-MM-dd HH:mm}（本流程本轮停在此，下轮重试）",
+                        flow, w.EffStart, w.WindowEnd);
+                    break; // 停在失败窗口，避免 T_covered 越过留洞
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// 从已登记批次派生该流程的数据时间轴高水位 T_covered（不新增存储）。委托 <see cref="IngestionPlanner.HighWatermark"/>。
+    /// </summary>
+    private async Task<DateTime?> ComputeTCoveredAsync(DraftlineDbContext db, FlowType flow, string[] expectedGroups, CancellationToken ct)
+    {
+        var rows = await db.BatchRegistries
+            .Where(b => b.Flow == flow)
+            .Select(b => new { b.BatchId, b.GroupName })
+            .ToListAsync(ct);
+        return IngestionPlanner.HighWatermark(rows.Select(r => (r.BatchId, r.GroupName)), expectedGroups);
     }
 
     /// <summary>
