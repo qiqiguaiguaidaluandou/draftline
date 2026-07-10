@@ -323,7 +323,8 @@ public sealed class DataIngestionService : BackgroundService
         _logger.LogInformation("Ingesting/Healing batch: {Flow} - {GroupName} - {BatchId} (Disk:{Disk}, DB:{Db}, Rows:{Rows})",
             flow, groupName, batchId, diskExists, registry != null, rows.Count);
 
-        // 注意：不再因 rows.Count==0 早退——空组也要落盘(文件夹+空表)并登记 TotalRows=0。
+        // 注意：不再因 rows.Count==0 早退——空组也要落盘(文件夹+空表)并登记 TotalRows=0（推进 T_covered 高水位、防重采）。
+        // 但空批次没有行可提交：新建时直接置终态 Done + 哨兵 AuditId（见下），避免永远卡在"待处理"。
 
         var resp = new FetchResponse
         {
@@ -351,6 +352,11 @@ public sealed class DataIngestionService : BackgroundService
         var drawings = rows.SelectMany(r => r.Drawings).Select(d => (d.FileName, d.Content));
         await store.SaveBatchAsync(resp, groupName, drawings, ct);
 
+        // 空窗（该组本窗口 0 行）：登记为终态 Done + 哨兵 AuditId，从源头避免"无行可提交却卡在待处理"。
+        // 哨兵前缀区分"空窗自动完结"与"用户回传完成"（后者 AuditId 形如 AUDIT-...，见 /submit）。
+        var isEmpty = rows.Count == 0;
+        var emptyAuditId = isEmpty ? $"AUTO-EMPTY-{batchId}" : null;
+
         // 5. 注册或刷新数据库状态
         if (registry == null)
         {
@@ -359,7 +365,8 @@ public sealed class DataIngestionService : BackgroundService
                 BatchId = batchId,
                 GroupName = groupName,
                 Flow = flow,
-                Status = BatchLocation.Todo,
+                Status = isEmpty ? BatchLocation.Done : BatchLocation.Todo,
+                AuditId = emptyAuditId,
                 TotalRows = rows.Count, // 记录总行数
                 CreatedAt = DateTime.UtcNow,
                 LastModified = DateTime.UtcNow
@@ -369,10 +376,17 @@ public sealed class DataIngestionService : BackgroundService
         else
         {
             registry.TotalRows = rows.Count;
-            registry.LastModified = DateTime.UtcNow; 
+            // 磁盘自愈重存时若该组已变空且从未被用户处理过（仍 Todo、无 AuditId），同样收口到终态；
+            // 已提交/已处理的批次(有真实 AuditId 或已 Done)不回退。
+            if (isEmpty && registry.Status == BatchLocation.Todo && registry.AuditId == null)
+            {
+                registry.Status = BatchLocation.Done;
+                registry.AuditId = emptyAuditId;
+            }
+            registry.LastModified = DateTime.UtcNow;
         }
 
-        // 6. 记录系统日志
+        // 6. 记录系统日志（空窗自动完结单独留痕，便于审计区分）
         db.ActivityLogs.Add(new ActivityLog
         {
             Action = "Ingest",
@@ -381,7 +395,8 @@ public sealed class DataIngestionService : BackgroundService
             GroupName = groupName,
             BatchId = batchId,
             ImpactCount = rows.Count,
-            Status = "Success",
+            Status = isEmpty ? "EmptyAutoDone" : "Success",
+            AuditId = emptyAuditId,
             Timestamp = DateTime.UtcNow
         });
 
