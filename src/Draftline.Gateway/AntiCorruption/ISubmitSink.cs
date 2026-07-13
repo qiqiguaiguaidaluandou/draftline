@@ -4,8 +4,7 @@ using Draftline.Core.Enums;
 namespace Draftline.Gateway.AntiCorruption;
 
 /// <summary>
-/// 回传防腐层：按流程把正常行回传到目标系统（核价→SRM）。
-/// 挑图→EBS 回传接口尚未提供（客户端已拦截该动作，服务端触达则抛未接入）。
+/// 回传防腐层：按流程把正常行回传到目标系统（核价→SRM 价格；挑图→EBS 机加结果 CUX_AI_MACH_DRW_RST）。
 /// </summary>
 public interface ISubmitSink
 {

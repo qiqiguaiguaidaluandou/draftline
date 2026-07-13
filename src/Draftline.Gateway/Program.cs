@@ -87,12 +87,12 @@ builder.Services.AddSingleton(plmOptions);
 builder.Services.AddHttpClient<PlmClient>();
 builder.Services.AddHttpClient<IEbsPlmSource, EbsPlmSource>();
 
-// 回传：核价价格 → SRM（SrmSubmitSink）。挑图 → EBS 回传接口尚未提供，
-// 客户端已拦截该动作；服务端那一支若被触达会抛「未接入」。
+// 回传：核价价格 → SRM，挑图机加结果 → EBS（CUX_AI_MACH_DRW_RST）。同一 RemoteSubmitSink 按流程分派，
+// 鉴权都复用 EBS 的 JWT。URL 留空则对应回传在运行时报错、批次不置 Done、可重试（不造假）。
 var srmOptions = new SrmOptions();
 builder.Configuration.GetSection("Srm").Bind(srmOptions);
 builder.Services.AddSingleton(srmOptions);
-builder.Services.AddHttpClient<ISubmitSink, SrmSubmitSink>();
+builder.Services.AddHttpClient<ISubmitSink, RemoteSubmitSink>();
 
 var app = builder.Build();
 

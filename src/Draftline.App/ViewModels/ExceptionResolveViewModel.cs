@@ -74,18 +74,13 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
 
     [ObservableProperty] private string _folderPathText = string.Empty;
 
-    /// <summary>挑图→EBS 回传接口尚未提供：该流程暂不支持重新回传（按钮禁用、不调后端、不进异常池）。重新取图不受影响。</summary>
-    public bool IsSubmitSupported => _flow == FlowType.Pricing;
+    public bool CanUpload => CanResolve && Row is { Status: RowStatus.Done };
 
-    public bool CanUpload => IsSubmitSupported && CanResolve && Row is { Status: RowStatus.Done };
-
-    public string GateText => !IsSubmitSupported
-        ? $"挑图回传 {TargetSystem} 接口未接入，暂不支持重新回传（仍可重新获取图纸）。"
-        : !CanResolve
-            ? _blockReason
-            : Row is { Status: RowStatus.Done }
-                ? $"必填项已填，可重新回传 {TargetSystem}。"
-                : "请先填写必填列（核价=目标价 / 挑图=是否机加中心可以做），「上传」才可点。";
+    public string GateText => !CanResolve
+        ? _blockReason
+        : Row is { Status: RowStatus.Done }
+            ? $"必填项已填，可重新回传 {TargetSystem}。"
+            : "请先填写必填列（核价=目标价 / 挑图=是否机加中心可以做），「上传」才可点。";
 
     private string _blockReason = string.Empty;
 

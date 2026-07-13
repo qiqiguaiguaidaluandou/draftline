@@ -1,9 +1,9 @@
 namespace Draftline.Gateway.AntiCorruption;
 
 /// <summary>
-/// SRM 回传接口配置（来自 appsettings 的 "Srm" 段）。鉴权复用 EBS 的 JWT（同 Ebs:JwtSecret/JwtIssuer/AuthScheme）。
-/// 真实地址放 appsettings.local.json（不进 git）。仅图纸核价→SRM 这一支用真实接口；
-/// 机加挑图→EBS 回传接口尚未提供（客户端已拦截该动作）。
+/// SRM 价格回传接口配置（来自 appsettings 的 "Srm" 段），仅核价→SRM 这一支用。鉴权复用 EBS 的 JWT
+/// （同 Ebs:JwtSecret/JwtIssuer/AuthScheme）。真实地址放 appsettings.local.json（不进 git）。
+/// 挑图→EBS 机加结果回传的地址/接口码在 Ebs 段（DrawingResultUrl/DrawingResultIfaceCode）。
 /// </summary>
 public sealed class SrmOptions
 {

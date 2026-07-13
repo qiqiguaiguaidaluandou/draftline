@@ -27,6 +27,12 @@ public sealed class EbsOptions
     /// <summary>机加中心挑图接口码（固定值）。</summary>
     public string DrawingIfaceCode { get; set; } = "CUX_AI_MACH_DRW";
 
+    /// <summary>机加挑图结果回传接口 URL（POST）。回传 EBS-ID + 是否机加中心可以做。留空则回传在运行时报错、批次不置 Done、可重试。</summary>
+    public string DrawingResultUrl { get; set; } = "";
+
+    /// <summary>机加挑图结果回传接口码（固定值，随请求体 P_IFACE_CODE 发送）。</summary>
+    public string DrawingResultIfaceCode { get; set; } = "CUX_AI_MACH_DRW_RST";
+
     /// <summary>
     /// 核价的固定期望组别（完整名，作为文件夹/权限键）。无论某组当天有无数据，都会为每个期望组建批次文件夹+表格，
     /// 空组只是表里没数据行——便于区分"采过但没数据"与"没采到"。
