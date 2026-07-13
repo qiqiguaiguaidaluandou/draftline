@@ -38,8 +38,9 @@ public sealed class DataIngestionService : BackgroundService
     {
         _logger.LogInformation("Data Ingestion Service started. 按排程采集（核价 10:00/16:00；挑图 10:00/15:00/18:30）。");
 
-        // 启动先清一次过期批次；采集本身由下面的循环按排程触发（含重启后补采）。
+        // 启动先清一次过期批次与过期日志；采集本身由下面的循环按排程触发（含重启后补采）。
         await CleanupOldBatchesAsync(stoppingToken);
+        await CleanupOldLogsAsync(stoppingToken);
         var lastCleanup = DateTime.UtcNow;
         var cleanupInterval = TimeSpan.FromHours(6); // 每 6 小时清理一次（一天约 4 次）；过期判定按天，无需更频繁。
 
@@ -56,6 +57,7 @@ public sealed class DataIngestionService : BackgroundService
                 if (DateTime.UtcNow - lastCleanup >= cleanupInterval)
                 {
                     await CleanupOldBatchesAsync(stoppingToken);
+                    await CleanupOldLogsAsync(stoppingToken);
                     lastCleanup = DateTime.UtcNow;
                 }
             }
@@ -112,6 +114,50 @@ public sealed class DataIngestionService : BackgroundService
 
         await db.SaveChangesAsync(ct);
         _logger.LogInformation("Cleanup completed. Removed {Count} batches.", expired.Count);
+    }
+
+    /// <summary>
+    /// 分层清理 ActivityLogs（唯一一张日志表，靠 Action 区分种类）。按性质分三档保留，各自可配、各自阈值：
+    ///   审计(Action="Submit")：RetentionDaysForAuditLog，默认 180 天（追溯价值最高，留久）；
+    ///   行为埋点(Action="Behavior")：RetentionDaysForBehaviorLog，默认 30 天（与各端点动作日志高度冗余，短留）；
+    ///   其余(登录/改密/改行/挂起/处理/取图/系统 Ingest/后台 Admin*)：RetentionDaysForOperationLog，默认 90 天。
+    /// 任一档配 &lt;= 0 视为"永久保留"（跳过该档删除），作为不清理的逃生阀。
+    /// 用 ExecuteDeleteAsync 直接下发 DELETE，不把行读进内存。
+    /// </summary>
+    private async Task CleanupOldLogsAsync(CancellationToken ct)
+    {
+        var auditDays = _config.GetValue<int>("Config:RetentionDaysForAuditLog", 180);
+        var behaviorDays = _config.GetValue<int>("Config:RetentionDaysForBehaviorLog", 30);
+        var operationDays = _config.GetValue<int>("Config:RetentionDaysForOperationLog", 90);
+
+        var now = DateTime.UtcNow;
+
+        using var scope = _sp.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DraftlineDbContext>();
+
+        var auditRemoved = auditDays > 0
+            ? await db.ActivityLogs
+                .Where(x => x.Action == "Submit" && x.Timestamp < now.AddDays(-auditDays))
+                .ExecuteDeleteAsync(ct)
+            : 0;
+
+        var behaviorRemoved = behaviorDays > 0
+            ? await db.ActivityLogs
+                .Where(x => x.Action == "Behavior" && x.Timestamp < now.AddDays(-behaviorDays))
+                .ExecuteDeleteAsync(ct)
+            : 0;
+
+        var operationRemoved = operationDays > 0
+            ? await db.ActivityLogs
+                .Where(x => x.Action != "Submit" && x.Action != "Behavior" && x.Timestamp < now.AddDays(-operationDays))
+                .ExecuteDeleteAsync(ct)
+            : 0;
+
+        var total = auditRemoved + behaviorRemoved + operationRemoved;
+        if (total > 0)
+            _logger.LogInformation(
+                "Log cleanup completed. Removed {Total} activity logs (audit {Audit}@{AuditDays}d, behavior {Behavior}@{BehaviorDays}d, operation {Op}@{OpDays}d).",
+                total, auditRemoved, auditDays, behaviorRemoved, behaviorDays, operationRemoved, operationDays);
     }
 
     // 采集排程的唯一权威定义在 Draftline.Core.Schemas.IngestionSchedules（客户端补拉/后台展示共用同一套）。
