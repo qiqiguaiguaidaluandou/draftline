@@ -19,11 +19,13 @@
     <LangVersion>latest</LangVersion>
     <RootNamespace>Draftline.App</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- exe / 任务栏 / 「添加删除程序」图标（多分辨率 .ico）。 -->
+    <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
 
     <!-- 应用标识：进入 ClickOnce 清单/「添加删除程序」与可执行文件版本信息。 -->
-    <Product>图纸核价 / 挑图纸客户端</Product>
-    <Company>图纸核价系统</Company>
-    <AssemblyTitle>Draftline 客户端</AssemblyTitle>
+    <Product>核价挑图工作台</Product>
+    <Company>核价挑图系统</Company>
+    <AssemblyTitle>核价挑图工作台</AssemblyTitle>
     <Version>1.0.0</Version>
   </PropertyGroup>
 
@@ -36,6 +38,11 @@
   <ItemGroup>
     <ProjectReference Include="..\Draftline.Core\Draftline.Core.csproj" />
     <ProjectReference Include="..\Draftline.Infrastructure\Draftline.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 窗口标题栏图标（Resource，供 Window.Icon 以 /Assets/app-icon.png 引用）。 -->
+    <Resource Include="Assets\app-icon.png" />
   </ItemGroup>
 
   <ItemGroup>
