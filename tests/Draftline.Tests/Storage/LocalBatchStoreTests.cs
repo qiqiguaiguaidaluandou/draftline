@@ -49,20 +49,43 @@ public class LocalBatchStoreTests : IDisposable
         var batch = await _store.WriteFetchedBatchAsync(SampleFetch());
 
         Assert.Equal(BatchLocation.Todo, batch.Location);
-        Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbookName(batch.FolderName))));
+        Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbookName(batch.Flow, batch.FolderName))));
         Assert.True(File.Exists(Path.Combine(batch.FolderPath, LocalFolders.Manifest)));
         Assert.True(File.Exists(Path.Combine(batch.FolderPath, "M-1__件1.pdf")));
         Assert.True(_store.BatchExists(FlowType.Pricing, Emp, Ws, We));
     }
 
     [Fact]
-    public async Task Xlsx_filename_equals_batch_folder_name()
+    public async Task Xlsx_filename_has_flow_prefix_and_batch_folder_name()
     {
         var batch = await _store.WriteFetchedBatchAsync(SampleFetch());
 
         var xlsxFiles = Directory.GetFiles(batch.FolderPath, "*.xlsx");
         Assert.Single(xlsxFiles);
-        Assert.Equal(batch.FolderName + ".xlsx", Path.GetFileName(xlsxFiles[0]));
+        // 表格文件名 = 作业流程名前缀 + 批次数据范围（如「图纸核价_20260526_1531-...xlsx」）。
+        Assert.Equal(LocalFolders.GridWorkbookName(batch.Flow, batch.FolderName), Path.GetFileName(xlsxFiles[0]));
+        Assert.StartsWith(LocalFolders.FlowFolder(batch.Flow) + "_", Path.GetFileName(xlsxFiles[0]));
+    }
+
+    [Fact]
+    public async Task Get_reads_legacy_named_xlsx_for_back_compat()
+    {
+        // 历史批次的表格文件无流程前缀（<窗口>.xlsx）。把新命名文件改回旧名，模拟旧数据。
+        var written = await _store.WriteFetchedBatchAsync(SampleFetch());
+        var newPath = Path.Combine(written.FolderPath, LocalFolders.GridWorkbookName(written.Flow, written.FolderName));
+        var legacyPath = Path.Combine(written.FolderPath, LocalFolders.LegacyGridWorkbookName(written.FolderName));
+        File.Move(newPath, legacyPath);
+
+        // 读取应回退到旧命名，正常取回行。
+        var batch = await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName);
+        Assert.NotNull(batch);
+        Assert.Equal(2, batch!.Rows.Count);
+
+        // 一次暂存后应迁移到新命名，并清掉旧文件（不再并存两个 xlsx）。
+        await _store.SaveBatchAsync(batch);
+        Assert.True(File.Exists(newPath));
+        Assert.False(File.Exists(legacyPath));
+        Assert.Single(Directory.GetFiles(written.FolderPath, "*.xlsx"));
     }
 
     [Fact]

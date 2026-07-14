@@ -156,7 +156,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
         }
 
         var fields = _fields.FieldsFor(flow);
-        var xlsxRows = ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields);
+        var xlsxRows = ExcelGridIO.Read(LocalFolders.ResolveGridWorkbookPath(dir, flow, folderName), fields);
         var manifest = await BatchManifest.LoadAsync(Path.Combine(dir, LocalFolders.Manifest), ct);
         var manifestByKey = manifest?.Rows.ToDictionary(m => m.RowKey) ?? new();
 
@@ -243,7 +243,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
             });
         }
 
-        ExcelGridIO.Write(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields, rows);
+        ExcelGridIO.Write(GridWorkbookWritePath(dir, fetched.Flow, folderName), fields, rows);
 
         var manifest = new BatchManifest
         {
@@ -276,7 +276,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
     public async Task SaveBatchAsync(Batch batch, CancellationToken ct = default)
     {
         var fields = _fields.FieldsFor(batch.Flow);
-        ExcelGridIO.Write(Path.Combine(batch.FolderPath, LocalFolders.GridWorkbookName(batch.FolderName)), fields, batch.Rows);
+        ExcelGridIO.Write(GridWorkbookWritePath(batch.FolderPath, batch.Flow, batch.FolderName), fields, batch.Rows);
 
         var manifestPath = Path.Combine(batch.FolderPath, LocalFolders.Manifest);
         var manifest = await BatchManifest.LoadAsync(manifestPath, ct) ?? new BatchManifest
@@ -454,7 +454,7 @@ public sealed class LocalBatchStore : ILocalBatchStore
     private List<MaterialRow> LoadRowsFromXlsx(string dir, string folderName, FlowType flow)
     {
         var fields = _fields.FieldsFor(flow);
-        return ExcelGridIO.Read(Path.Combine(dir, LocalFolders.GridWorkbookName(folderName)), fields)
+        return ExcelGridIO.Read(LocalFolders.ResolveGridWorkbookPath(dir, flow, folderName), fields)
             .Select(x => new MaterialRow { RowKey = x.RowKey, Values = x.Values, Status = RowStatus.Pending })
             .ToList();
     }
@@ -481,6 +481,14 @@ public sealed class LocalBatchStore : ILocalBatchStore
             if (values.TryGetValue(k, out var v) && !string.IsNullOrEmpty(v))
                 return v;
         return null;
+    }
+
+    /// <summary>表格写入路径：新命名（含流程前缀）；顺手清掉同目录旧命名，避免并存两个 xlsx（迁移）。</summary>
+    private static string GridWorkbookWritePath(string dir, FlowType flow, string folderName)
+    {
+        var legacy = Path.Combine(dir, LocalFolders.LegacyGridWorkbookName(folderName));
+        if (File.Exists(legacy)) { try { File.Delete(legacy); } catch { /* 清理失败不阻断写入 */ } }
+        return Path.Combine(dir, LocalFolders.GridWorkbookName(flow, folderName));
     }
 
     private static string EnsureUnique(string fileName, HashSet<string> used)

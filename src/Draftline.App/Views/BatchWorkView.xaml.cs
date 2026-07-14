@@ -128,7 +128,8 @@ public partial class BatchWorkView : UserControl
         return col;
     }
 
-    /// <summary>操作列：非异常显示「挂起异常」，异常显示「撤销异常」（可见性由行状态驱动）。</summary>
+    /// <summary>操作列：非异常显示「挂起异常」，异常显示「撤销异常」（可见性由行状态驱动）；
+    /// 「重新获取图纸」常驻——任何行都可按料号重取一次图纸（同名覆盖 / 无则新增）。</summary>
     private static DataGridTemplateColumn BuildActionColumn()
     {
         const string xaml =
@@ -143,13 +144,16 @@ public partial class BatchWorkView : UserControl
             "Visibility='{Binding RestoreVisibility}' " +
             "Command='{Binding DataContext.RestoreCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}' " +
             "CommandParameter='{Binding}'/>" +
+            "<Button Content='重新获取图纸' Padding='8,3' MinHeight='26' Margin='6,0,0,0' " +
+            "Command='{Binding DataContext.RefetchDrawingCommand, RelativeSource={RelativeSource AncestorType={x:Type UserControl}}}' " +
+            "CommandParameter='{Binding}'/>" +
             "</StackPanel></DataTemplate>";
 
         return new DataGridTemplateColumn
         {
             Header = "操作",
             CellTemplate = (DataTemplate)XamlReader.Parse(xaml),
-            Width = 130,
+            Width = 240,
         };
     }
 }

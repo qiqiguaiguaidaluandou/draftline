@@ -54,7 +54,7 @@ public class RemoteFirstStorageTests : IDisposable
         // Assert
         var batchDir = LocalPaths.ServerBatchDir(_tempRoot, flow, group, batchId);
         Assert.True(Directory.Exists(batchDir));
-        Assert.True(File.Exists(Path.Combine(batchDir, LocalFolders.GridWorkbookName(batchId))));
+        Assert.True(File.Exists(Path.Combine(batchDir, LocalFolders.GridWorkbookName(flow, batchId))));
         Assert.True(File.Exists(Path.Combine(batchDir, "M1001__A.pdf")));
     }
 
@@ -90,7 +90,7 @@ public class RemoteFirstStorageTests : IDisposable
         await _store.UpdateExcelRowAsync(flow, group, batchId, rowKey, newValues);
 
         // Assert
-        var excelPath = Path.Combine(LocalPaths.ServerBatchDir(_tempRoot, flow, group, batchId), LocalFolders.GridWorkbookName(batchId));
+        var excelPath = Path.Combine(LocalPaths.ServerBatchDir(_tempRoot, flow, group, batchId), LocalFolders.GridWorkbookName(flow, batchId));
         var fields = _fields.FieldsFor(flow);
         var readBack = ExcelGridIO.Read(excelPath, fields);
         

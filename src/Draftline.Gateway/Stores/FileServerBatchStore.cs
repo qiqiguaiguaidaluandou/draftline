@@ -47,8 +47,10 @@ public sealed class FileServerBatchStore : IServerBatchStore
                 await File.WriteAllBytesAsync(Path.Combine(dir, fileName), content, ct);
             }
 
-            // 2. 写 Excel
-            var excelPath = Path.Combine(dir, LocalFolders.GridWorkbookName(batchId));
+            // 2. 写 Excel（新命名含流程前缀；顺手清掉旧命名，避免并存两个表格 xlsx）
+            var legacyExcel = Path.Combine(dir, LocalFolders.LegacyGridWorkbookName(batchId));
+            if (File.Exists(legacyExcel)) { try { File.Delete(legacyExcel); } catch { /* 清理失败不阻断写入 */ } }
+            var excelPath = Path.Combine(dir, LocalFolders.GridWorkbookName(fetched.Flow, batchId));
             var fieldDefs = _fields.FieldsFor(fetched.Flow);
 
             using var workbook = new XSSFWorkbook();
@@ -129,8 +131,10 @@ public sealed class FileServerBatchStore : IServerBatchStore
     public async Task UpdateExcelRowAsync(FlowType flow, string groupName, string batchId, string rowKey, Dictionary<string, string?> values, CancellationToken ct = default)
     {
         var dir = GetBatchPath(flow, groupName, batchId);
-        var excelPath = Path.Combine(dir, LocalFolders.GridWorkbookName(batchId));
-        if (!File.Exists(excelPath)) throw new FileNotFoundException("Excel file not found.", excelPath);
+        // 读旧批次兼容无前缀命名；写回一律用新命名（含流程前缀），并在迁移后删掉旧文件。
+        var readPath = LocalFolders.ResolveGridWorkbookPath(dir, flow, batchId);
+        var excelPath = Path.Combine(dir, LocalFolders.GridWorkbookName(flow, batchId));
+        if (!File.Exists(readPath)) throw new FileNotFoundException("Excel file not found.", readPath);
 
         var fieldDefs = _fields.FieldsFor(flow);
         var rowKeyField = fieldDefs.FirstOrDefault(f => f.IsRowKey)
@@ -142,7 +146,7 @@ public sealed class FileServerBatchStore : IServerBatchStore
         try
         {
             IWorkbook workbook;
-            using (var readFs = new FileStream(excelPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var readFs = new FileStream(readPath, FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 workbook = WorkbookFactory.Create(readFs);
             }
@@ -190,9 +194,18 @@ public sealed class FileServerBatchStore : IServerBatchStore
 
             if (updated)
             {
-                // 写回文件
-                using var writeFs = new FileStream(excelPath, FileMode.Create, FileAccess.Write, FileShare.None);
-                workbook.Write(writeFs);
+                // 写回文件（新命名）
+                using (var writeFs = new FileStream(excelPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                {
+                    workbook.Write(writeFs);
+                }
+
+                // 迁移：若原读自旧命名文件，写完新文件后删掉旧的，避免目录里并存两个表格 xlsx。
+                if (!string.Equals(readPath, excelPath, System.StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(readPath))
+                {
+                    try { File.Delete(readPath); } catch { /* 清理失败不阻断 */ }
+                }
             }
         }
         finally

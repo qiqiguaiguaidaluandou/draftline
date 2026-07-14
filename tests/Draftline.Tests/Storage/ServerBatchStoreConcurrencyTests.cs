@@ -62,7 +62,7 @@ public class ServerBatchStoreConcurrencyTests
 
     private static Dictionary<string, string> ReadTargetPrices(FileServerBatchStore store, string batchId, string group)
     {
-        using var stream = store.OpenFile(FlowType.Pricing, group, batchId, LocalFolders.GridWorkbookName(batchId))
+        using var stream = store.OpenFile(FlowType.Pricing, group, batchId, LocalFolders.GridWorkbookName(FlowType.Pricing, batchId))
                            ?? throw new InvalidOperationException("批次 Excel 未找到。");
         var workbook = WorkbookFactory.Create(stream);
         var sheet = workbook.GetSheetAt(0);

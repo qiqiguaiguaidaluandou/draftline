@@ -8,6 +8,7 @@ using Draftline.Core.Contracts;
 using Draftline.Core.Contracts.Http;
 using Draftline.Core.Enums;
 using Draftline.Core.Models;
+using Draftline.Core.Validation;
 
 namespace Draftline.App.ViewModels;
 
@@ -212,6 +213,15 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
         if (Row.Status != RowStatus.Done)
         {
             _dialog.Error("请先填写必填列后再上传。");
+            return;
+        }
+
+        // 回传前把关待填列取值（如核价目标价：须为有效数字、大于 0、最多两位小数）。
+        foreach (var f in Fields)
+        {
+            var err = FieldRules.Validate(f, Row.Model.Get(f.Key));
+            if (err is null) continue;
+            _dialog.Error($"填写有误，请修正后再回传：{err}");
             return;
         }
 
