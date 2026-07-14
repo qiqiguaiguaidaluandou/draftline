@@ -60,12 +60,45 @@ public class BatchSyncServiceTests
             Flow = FlowType.Pricing,
             GroupName = "Group1",
             Status = BatchLocation.Done,
+            TotalRows = 5, // 有数据的已处理批次
             LastModified = oldDate
         });
 
         var result = await svc.MirrorSyncAsync(Emp, Array.Empty<FlowType>());
 
-        Assert.Equal(0, result.Fetched); // 超过 15 天的 Done 不同步
+        Assert.Equal(0, result.Fetched); // 超过 15 天、有数据的 Done 不同步
+    }
+
+    [Fact]
+    public async Task MirrorSync_downloads_empty_done_batch_even_when_old()
+    {
+        // 空批次（0 行）出生即 Done、客户端从没见它 Todo。即便数据窗口超过 15 天（追赶旧窗/首次部署回填），
+        // 也应无条件镜像到本地，避免"服务器上有、本地没有"。
+        var (svc, store, data, _) = Build();
+        var root = TempDir.Create();
+        try
+        {
+            store.Root = root;
+            var oldDate = DateTime.Now.AddDays(-20);
+            var batchId = LocalPaths.BatchFolderName(oldDate, oldDate.AddHours(1));
+
+            data.Catalog.Add(new BatchCatalogItem
+            {
+                BatchId = batchId,
+                Flow = FlowType.Pricing,
+                GroupName = "Group1",
+                Status = BatchLocation.Done,
+                TotalRows = 0, // 空批次
+                LastModified = DateTime.Now // 刚落库
+            });
+
+            var result = await svc.MirrorSyncAsync(Emp, Array.Empty<FlowType>());
+
+            Assert.Equal(1, result.Fetched); // 空批次即便窗口旧也同步
+            Assert.Equal(batchId, result.NewBatches[0].FolderName);
+            Assert.Equal(BatchLocation.Done, result.NewBatches[0].Location);
+        }
+        finally { TempDir.Delete(root); }
     }
 
     [Fact]

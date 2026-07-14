@@ -53,10 +53,15 @@ public sealed class BatchSyncService
 
             try
             {
-                // 确定同步范围：Todo 全量，Done 15天
+                // 确定同步范围：Todo 全量，Done 15 天（按数据窗口）。
                 LocalPaths.TryParseFolderName(item.BatchId, out var windowStart, out var windowEnd);
                 bool isRecentDone = item.Status == BatchLocation.Done && windowEnd > DateTime.Now.AddDays(-15);
-                bool shouldSync = item.Status == BatchLocation.Todo || isRecentDone;
+
+                // 空批次（0 行）出生即 Done、客户端从没见它 Todo 过：必须无条件镜像，否则本地永远缺它
+                // （体量仅一个空表头 xlsx；且受服务端 Done 保留期约束——过期后从 catalog 消失，会被下面第 2 步一并清理，
+                //  不会无限累积）。修此前：空批次若窗口不在 15 天内（如追赶旧窗/首次部署回填）就同步不到本地。
+                bool isEmptyAutoDone = item.Status == BatchLocation.Done && item.TotalRows == 0;
+                bool shouldSync = item.Status == BatchLocation.Todo || isRecentDone || isEmptyAutoDone;
 
                 if (!shouldSync) continue;
 
