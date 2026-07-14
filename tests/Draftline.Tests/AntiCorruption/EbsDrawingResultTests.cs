@@ -44,10 +44,10 @@ public class EbsDrawingResultTests
     }
 
     [Fact]
-    public void PartialFailure_fails_only_rows_listed_in_response_data()
+    public void PartialFailure_uses_per_row_err_msg_as_exception_reason()
     {
         // 真实部分失败报文：E + "数据更新部分失败！" + X_RESPONSE_DATA 是转义 JSON 字符串数组（回传失败的行）。
-        // 本批 3 行，前 2 行在 X_RESPONSE_DATA 里 → 失败进异常池；第 3 行未列出 → 已落库成功。
+        // 每行带自己的 ERR_MSG → 该行异常原因用这条逐行原因，而非批次级 X_RETURN_MESG。
         var raw = """
         {
           "OutputParameters": {
@@ -56,7 +56,7 @@ public class EbsDrawingResultTests
             "X_BATCH_NUMBER": "AI20260622163533",
             "X_RETURN_CODE": "E",
             "X_RETURN_MESG": "数据更新部分失败！",
-            "X_RESPONSE_DATA": "[{\"SEQ_ID\":1018953, \"ORG_CODE\":\"H06\"},{\"SEQ_ID\":1018954, \"ORG_CODE\":\"H06\"}]"
+            "X_RESPONSE_DATA": "[{\"ERR_MSG\":\"SEQ_ID数据不正确,未找到相关数据！\",\"ORG_CODE\":\"H06\",\"SEQ_ID\":\"1018953\"},{\"ERR_MSG\":\"组织不存在\",\"ORG_CODE\":\"H06\",\"SEQ_ID\":\"1018954\"}]"
           }
         }
         """;
@@ -65,11 +65,32 @@ public class EbsDrawingResultTests
 
         var f1 = res.Single(r => r.RowKey == "1018953");
         var f2 = res.Single(r => r.RowKey == "1018954");
-        Assert.False(f1.Success);                        // 列出 → 失败（进异常池）
+        Assert.False(f1.Success);                                     // 列出 → 失败（进异常池）
         Assert.False(f2.Success);
-        Assert.Equal("数据更新部分失败！", f1.Message);   // 失败原因带回端点，写进异常记录
-        Assert.Equal("数据更新部分失败！", f2.Message);
+        Assert.Equal("SEQ_ID数据不正确,未找到相关数据！", f1.Message); // 逐行 ERR_MSG 写进异常记录
+        Assert.Equal("组织不存在", f2.Message);
         Assert.True(res.Single(r => r.RowKey == "1018955").Success); // 未列出 → 已落库成功
+    }
+
+    [Fact]
+    public void PartialFailure_falls_back_to_batch_mesg_when_err_msg_absent()
+    {
+        // 没有 ERR_MSG（旧报文形态）→ 回落到批次级 X_RETURN_MESG。
+        var raw = """
+        {
+          "OutputParameters": {
+            "X_RETURN_CODE": "E",
+            "X_RETURN_MESG": "数据更新部分失败！",
+            "X_RESPONSE_DATA": "[{\"SEQ_ID\":1018953, \"ORG_CODE\":\"H06\"}]"
+          }
+        }
+        """;
+
+        var res = RemoteSubmitSink.MapDrawingResult(Rows("1018953", "1018954"), raw);
+
+        Assert.False(res.Single(r => r.RowKey == "1018953").Success);
+        Assert.Equal("数据更新部分失败！", res.Single(r => r.RowKey == "1018953").Message);
+        Assert.True(res.Single(r => r.RowKey == "1018954").Success);
     }
 
     [Fact]

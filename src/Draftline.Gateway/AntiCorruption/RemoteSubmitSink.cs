@@ -23,6 +23,7 @@ namespace Draftline.Gateway.AntiCorruption;
 ///   EBS：X_RETURN_CODE=S → 全部成功；=E 且 X_RETURN_MESG 含「部分失败」→ X_RESPONSE_DATA 里的行永久失败、
 ///        其余成功（部分落库）；=E 其余情形 → 抛异常（整批回滚、未落库、可重试）。注意：任何 E 的 X_RESPONSE_DATA
 ///        都会带上未成功的数据，故判据是 X_RETURN_MESG 而非「是否带数据」。
+///        部分失败时每行的异常原因优先取 X_RESPONSE_DATA 里该行的 ERR_MSG（逐行具体原因），缺失才回落到批次级 X_RETURN_MESG。
 /// </summary>
 public sealed class RemoteSubmitSink : ISubmitSink
 {
@@ -149,7 +150,7 @@ public sealed class RemoteSubmitSink : ISubmitSink
             throw new InvalidOperationException($"EBS 挑图回传失败（{code ?? "无返回码"}）：{mesg}");
         }
 
-        // 部分失败：X_RESPONSE_DATA 带回未成功的行 → 仅这些行进异常池，其余视为已落库成功。
+        // 部分失败：X_RESPONSE_DATA 带回未成功的行（SEQ_ID → 该行 ERR_MSG）→ 仅这些行进异常池，其余视为已落库成功。
         var failed = op.TryGetProperty("X_RESPONSE_DATA", out var resp) ? ExtractFailedSeqIds(resp) : null;
         if (failed == null)
         {
@@ -160,18 +161,19 @@ public sealed class RemoteSubmitSink : ISubmitSink
 
         return rows.Select(r =>
         {
-            var isFailed = failed.Contains(SeqIdStr(r));
+            var isFailed = failed.TryGetValue(SeqIdStr(r), out var errMsg);
+            // 失败原因优先用该行的 ERR_MSG（EBS 逐行反馈的具体原因），缺失时回落到批次级 X_RETURN_MESG。
             return new SubmitRowResult
             {
                 RowKey = r.RowKey,
                 Success = !isFailed,
-                Message = isFailed ? mesg : null,
+                Message = isFailed ? (string.IsNullOrWhiteSpace(errMsg) ? mesg : errMsg) : null,
             };
         }).ToList();
     }
 
-    /// <summary>解析 X_RESPONSE_DATA 中的失败 SEQ_ID 集合；无可用数据时返回 null（=系统性失败信号）。</summary>
-    private static HashSet<string>? ExtractFailedSeqIds(JsonElement resp)
+    /// <summary>解析 X_RESPONSE_DATA 中的失败行（SEQ_ID → 该行 ERR_MSG）；无可用数据时返回 null（=系统性失败信号）。</summary>
+    private static Dictionary<string, string?>? ExtractFailedSeqIds(JsonElement resp)
     {
         // 容错两种形态：① 转义 JSON 字符串（同 P_REQUEST_DATA）；② 直接就是数组/对象。
         if (resp.ValueKind == JsonValueKind.Null || resp.ValueKind == JsonValueKind.Undefined)
@@ -195,22 +197,23 @@ public sealed class RemoteSubmitSink : ISubmitSink
         return CollectSeqIds(resp);
     }
 
-    private static HashSet<string>? CollectSeqIds(JsonElement el)
+    private static Dictionary<string, string?>? CollectSeqIds(JsonElement el)
     {
-        var set = new HashSet<string>();
+        var map = new Dictionary<string, string?>();
         if (el.ValueKind == JsonValueKind.Array)
         {
             foreach (var item in el.EnumerateArray())
-                AddSeqId(set, item);
+                AddSeqId(map, item);
         }
         else if (el.ValueKind == JsonValueKind.Object)
         {
-            AddSeqId(set, el);
+            AddSeqId(map, el);
         }
-        return set.Count > 0 ? set : null;
+        return map.Count > 0 ? map : null;
     }
 
-    private static void AddSeqId(HashSet<string> set, JsonElement item)
+    /// <summary>把一行 { SEQ_ID, ORG_CODE, ERR_MSG } 记入 SEQ_ID → ERR_MSG 映射（ERR_MSG 是该行失败原因，可缺省）。</summary>
+    private static void AddSeqId(Dictionary<string, string?> map, JsonElement item)
     {
         if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("SEQ_ID", out var v))
             return;
@@ -220,7 +223,7 @@ public sealed class RemoteSubmitSink : ISubmitSink
             JsonValueKind.String => v.GetString(),
             _ => null,
         };
-        if (!string.IsNullOrWhiteSpace(s)) set.Add(s.Trim());
+        if (!string.IsNullOrWhiteSpace(s)) map[s.Trim()] = Str(item, "ERR_MSG");
     }
 
     /// <summary>SEQ_ID：数值则发数字，否则发字符串（容错非纯数字的 EBS-ID）。</summary>
