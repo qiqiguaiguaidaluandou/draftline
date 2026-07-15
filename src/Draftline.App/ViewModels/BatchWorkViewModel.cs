@@ -326,6 +326,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
                 var items = exceptionRows.Select(r => new ExceptionItem
                 {
                     Flow = _flow,
+                    GroupName = _batch.GroupName, // 必填：漏设会落到模型默认 "Default"，令异常池产品线组显示错误
                     RowKey = r.RowKey,
                     MaterialCode = r.Model.Get("materialCode") ?? r.RowKey,
                     DisplayName = r.Model.Get("name") ?? r.Model.Get("materialDesc"),
