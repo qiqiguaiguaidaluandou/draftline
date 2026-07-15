@@ -104,9 +104,6 @@
       <!-- 侧边栏：直接映射本地文件夹（两流程功能区 + 系统） -->
       <Border Grid.Column="0" Background="{StaticResource SidebarBg}" BorderBrush="{StaticResource Border1}" BorderThickness="0,0,1,0">
         <DockPanel>
-          <TextBlock DockPanel.Dock="Bottom" TextWrapping="Wrap" Foreground="{StaticResource TextMuted}" FontSize="11"
-                     Margin="14,8,14,12"
-                     Text="「待处理 / 已处理 / 异常待跟进」即映射本机文件夹，软件是文件夹的视图。图纸由操作员自行到文件夹用本机软件查看。" />
           <ScrollViewer VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding Groups}" Margin="10,12">
               <ItemsControl.ItemTemplate>

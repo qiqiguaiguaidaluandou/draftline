@@ -34,10 +34,7 @@
         </Border>
 
         <TextBlock Text="核价挑图工作台" FontSize="21" FontWeight="SemiBold"
-                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,18,0,6" />
-        <TextBlock Text="PC 客户端 · 本机固定操作员&#x0a;登录身份后续由 DHR 统一提供（SSO）"
-                   Foreground="{StaticResource TextMuted}" FontSize="12.5" TextAlignment="Center"
-                   LineHeight="20" Margin="0,0,0,26" />
+                   Foreground="{StaticResource TextBrush}" HorizontalAlignment="Center" Margin="0,18,0,26" />
 
         <TextBlock Text="工号" Foreground="{StaticResource TextSecondary}" Margin="0,0,0,6" />
         <TextBox x:Name="EmployeeBox" Height="42" FontSize="14"
@@ -55,8 +52,6 @@
                 IsDefault="True"
                 Command="{Binding LoginCommand}"
                 IsEnabled="{Binding IsBusy, Converter={StaticResource InverseBool}}" />
-        <TextBlock Text="— 或 — 使用 DHR 单点登录（接入后启用）"
-                   Foreground="{StaticResource TextMuted}" FontSize="11.5" HorizontalAlignment="Center" Margin="0,18,0,0" />
       </StackPanel>
     </Border>
   </Grid>
