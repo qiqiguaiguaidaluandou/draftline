@@ -120,6 +120,61 @@ public class LocalBatchStoreTests : IDisposable
         Assert.Equal("99", r0.Get("targetPrice"));
     }
 
+    // ---- 删本地后重新同步：manifest 只剩占位（无逐行状态），从服务端权威事实重建行状态 ----
+
+    [Fact]
+    public async Task Rebuilds_done_status_from_filled_xlsx_when_manifest_missing()
+    {
+        var written = await _store.WriteFetchedBatchAsync(SampleFetch());
+        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
+
+        // 填一行的必填列（targetPrice）→ 已处理；值写入 xlsx（模拟服务端权威值）。
+        batch.Rows.Single(r => r.RowKey == "M-1").Set("targetPrice", "12.5");
+        await _store.SaveBatchAsync(batch);
+
+        // 模拟"删本地后重新同步"：xlsx 在（服务端值），逐行状态 manifest 没了。
+        File.Delete(Path.Combine(written.FolderPath, LocalFolders.Manifest));
+
+        var reread = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
+        Assert.Equal(RowStatus.Done, reread.Rows.Single(r => r.RowKey == "M-1").Status);
+        Assert.Equal(RowStatus.Pending, reread.Rows.Single(r => r.RowKey == "M-2").Status);
+        Assert.Equal(1, reread.DoneCount); // 进度/统计不再归零
+    }
+
+    [Fact]
+    public async Task Rebuilds_uploaded_status_for_done_batch_when_manifest_missing()
+    {
+        var written = await _store.WriteFetchedBatchAsync(SampleFetch());
+        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
+        await _store.MoveToDoneAsync(batch);
+
+        var doneDir = LocalPaths.LocalBatchDir(_root, FlowType.Pricing, BatchLocation.Done, written.GroupName, written.FolderName);
+        File.Delete(Path.Combine(doneDir, LocalFolders.Manifest));
+
+        var done = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Done, written.GroupName, written.FolderName))!;
+        Assert.All(done.Rows, r => Assert.Equal(RowStatus.Uploaded, r.Status));
+    }
+
+    [Fact]
+    public async Task Rebuilds_exception_status_from_pool_when_manifest_missing()
+    {
+        var written = await _store.WriteFetchedBatchAsync(SampleFetch());
+        await _store.AddExceptionsAsync(FlowType.Pricing, Emp, new[]
+        {
+            new ExceptionItem
+            {
+                Flow = FlowType.Pricing, GroupName = written.GroupName, RowKey = "M-2",
+                MaterialCode = "M-2", SourceBatch = written.FolderName, Reason = "缺图", SuspendedAt = We,
+            },
+        });
+        File.Delete(Path.Combine(written.FolderPath, LocalFolders.Manifest));
+
+        var reread = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
+        var m2 = reread.Rows.Single(r => r.RowKey == "M-2");
+        Assert.Equal(RowStatus.Exception, m2.Status);
+        Assert.Equal("缺图", m2.ExceptionReason);
+    }
+
     [Fact]
     public async Task MoveToDone_relocates_folder_and_stamps_submitted()
     {

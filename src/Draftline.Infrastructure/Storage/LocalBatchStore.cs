@@ -93,8 +93,16 @@ public sealed class LocalBatchStore : ILocalBatchStore
         }
         else
         {
+            // manifest 无逐行状态（删本地后重新同步只剩占位）：从服务端事实重建，避免进度/统计归零。
+            var exceptionByKey = await ExceptionKeysForBatchAsync(flow, folderName, ct);
             rows = LoadRowsFromXlsx(sub, folderName, flow);
-            foreach (var row in rows) row.GroupName = groupName;
+            foreach (var row in rows)
+            {
+                row.GroupName = groupName;
+                var isExc = exceptionByKey.TryGetValue(row.RowKey, out var reason);
+                row.Status = DeriveStatus(flow, location, row.Values, isExc);
+                if (isExc) row.ExceptionReason = reason;
+            }
             if (totalCount == 0) totalCount = rows.Count;
         }
 
@@ -132,6 +140,10 @@ public sealed class LocalBatchStore : ILocalBatchStore
         var xlsxRows = ExcelGridIO.Read(LocalFolders.ResolveGridWorkbookPath(dir, flow, folderName), fields);
         var manifest = await BatchManifest.LoadAsync(Path.Combine(dir, LocalFolders.Manifest), ct);
         var manifestByKey = manifest?.Rows.ToDictionary(m => m.RowKey) ?? new();
+        // manifest 缺行时（重同步后只剩占位）用异常池 + 填写情况 + 批次位置重建状态。
+        var exceptionByKey = manifestByKey.Count == 0
+            ? await ExceptionKeysForBatchAsync(flow, folderName, ct)
+            : new Dictionary<string, string?>();
 
         var rows = new List<MaterialRow>();
         foreach (var (rowKey, values) in xlsxRows)
@@ -149,7 +161,10 @@ public sealed class LocalBatchStore : ILocalBatchStore
             }
             else
             {
-                // 无 manifest 记录：扫盘按物料编码前缀找图
+                // 无 manifest 记录（删本地后重新同步）：从服务端事实重建状态，扫盘按物料编码前缀找图。
+                var isExc = exceptionByKey.TryGetValue(rowKey, out var reason);
+                row.Status = DeriveStatus(flow, location, values, isExc);
+                if (isExc) row.ExceptionReason = reason;
                 foreach (var file in ScanDrawings(dir, materialCode))
                     row.Drawings.Add(MakeDrawingRef(dir, Path.GetFileName(file), materialCode));
             }
@@ -430,6 +445,33 @@ public sealed class LocalBatchStore : ILocalBatchStore
         return ExcelGridIO.Read(LocalFolders.ResolveGridWorkbookPath(dir, flow, folderName), fields)
             .Select(x => new MaterialRow { RowKey = x.RowKey, Values = x.Values, Status = RowStatus.Pending })
             .ToList();
+    }
+
+    /// <summary>
+    /// 本地 manifest 缺该行时（如删本地后按权限重新同步——manifest 只剩占位、无逐行状态）
+    /// 从服务端权威事实重建行状态，保证进度/统计与行状态不丢：
+    /// 异常池命中→Exception；批次已在「已处理」→Uploaded；必填列（手填必填）已填齐→Done；否则 Pending。
+    /// 判定「填齐」的口径与 <c>RowViewModel.Reevaluate</c> 一致（IsEditable &amp;&amp; IsRequired）。
+    /// </summary>
+    private RowStatus DeriveStatus(FlowType flow, BatchLocation location,
+        IReadOnlyDictionary<string, string?> values, bool isException)
+    {
+        if (isException) return RowStatus.Exception;
+        if (location == BatchLocation.Done) return RowStatus.Uploaded;
+        var requiredKeys = _fields.FieldsFor(flow).Where(f => f.IsEditable && f.IsRequired).Select(f => f.Key).ToList();
+        var allFilled = requiredKeys.Count > 0
+                        && requiredKeys.All(k => !string.IsNullOrWhiteSpace(values.GetValueOrDefault(k)));
+        return allFilled ? RowStatus.Done : RowStatus.Pending;
+    }
+
+    /// <summary>读异常池，取本批次（SourceBatch==folderName）各异常行的 RowKey→原因，供状态重建标记 Exception。</summary>
+    private async Task<Dictionary<string, string?>> ExceptionKeysForBatchAsync(FlowType flow, string folderName, CancellationToken ct)
+    {
+        var file = Path.Combine(LocalPaths.LocalExceptionPoolRoot(Root, flow), LocalFolders.ExceptionPoolFile);
+        var pool = await ReadExceptionsAsync(file, ct);
+        return pool.Where(e => e.SourceBatch == folderName)
+                   .GroupBy(e => e.RowKey)
+                   .ToDictionary(g => g.Key, g => (string?)g.First().Reason);
     }
 
     private static DrawingRef MakeDrawingRef(string dir, string fileName, string materialCode) => new()
