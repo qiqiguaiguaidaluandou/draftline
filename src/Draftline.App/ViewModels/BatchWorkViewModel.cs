@@ -28,13 +28,14 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
 
     private readonly FlowType _flow;
     private readonly BatchLocation _location;
+    private readonly string _groupName;
     private readonly string _folderName;
     private Batch? _batch;
 
     public BatchWorkViewModel(
         ILocalBatchStore store, IDataGateway data, ISubmitGateway submit, IFieldProvider fieldProvider,
         ISession session, INavigationService nav, IDialogService dialog, IExplorerService explorer,
-        FlowType flow, BatchLocation location, string folderName)
+        FlowType flow, BatchLocation location, string groupName, string folderName)
     {
         _store = store;
         _data = data;
@@ -46,6 +47,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         _explorer = explorer;
         _flow = flow;
         _location = location;
+        _groupName = groupName;
         _folderName = folderName;
 
         Fields = _fieldProvider.FieldsFor(flow);
@@ -83,7 +85,7 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         IsBusy = true;
         try
         {
-            _batch = await _store.GetBatchAsync(_flow, _session.Operator.EmployeeId, _location, _folderName);
+            _batch = await _store.GetBatchAsync(_flow, _session.Operator.EmployeeId, _location, _groupName, _folderName);
             if (_batch is null)
             {
                 _dialog.Error("批次不存在或已被删除。");

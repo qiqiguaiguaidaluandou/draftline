@@ -34,7 +34,7 @@ internal sealed class FakeLocalBatchStore : ILocalBatchStore
     }
 
     public Task<IReadOnlyList<Batch>> ListBatchesAsync(FlowType flow, string employeeId, BatchLocation location, CancellationToken ct = default) => throw new NotSupportedException();
-    public Task<Batch?> GetBatchAsync(FlowType flow, string employeeId, BatchLocation location, string folderName, CancellationToken ct = default) => throw new NotSupportedException();
+    public Task<Batch?> GetBatchAsync(FlowType flow, string employeeId, BatchLocation location, string groupName, string folderName, CancellationToken ct = default) => throw new NotSupportedException();
     public Task SaveBatchAsync(Batch batch, CancellationToken ct = default) => throw new NotSupportedException();
     public Task MoveToDoneAsync(Batch batch, CancellationToken ct = default) => throw new NotSupportedException();
     public Task AddExceptionsAsync(FlowType flow, string employeeId, IEnumerable<ExceptionItem> items, CancellationToken ct = default) => throw new NotSupportedException();

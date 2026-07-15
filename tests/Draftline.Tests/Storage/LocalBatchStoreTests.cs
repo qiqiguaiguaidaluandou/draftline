@@ -77,7 +77,7 @@ public class LocalBatchStoreTests : IDisposable
         File.Move(newPath, legacyPath);
 
         // 读取应回退到旧命名，正常取回行。
-        var batch = await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName);
+        var batch = await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName);
         Assert.NotNull(batch);
         Assert.Equal(2, batch!.Rows.Count);
 
@@ -93,7 +93,7 @@ public class LocalBatchStoreTests : IDisposable
     {
         var written = await _store.WriteFetchedBatchAsync(SampleFetch());
 
-        var batch = await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName);
+        var batch = await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName);
 
         Assert.NotNull(batch);
         Assert.Equal(2, batch!.Rows.Count);
@@ -108,13 +108,13 @@ public class LocalBatchStoreTests : IDisposable
     public async Task Save_persists_row_status_and_filled_value_to_manifest()
     {
         var written = await _store.WriteFetchedBatchAsync(SampleFetch());
-        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName))!;
+        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
 
         batch.Rows[0].Status = RowStatus.Done;
         batch.Rows[0].Set("targetPrice", "99");
         await _store.SaveBatchAsync(batch);
 
-        var reread = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName))!;
+        var reread = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
         var r0 = reread.Rows.Single(r => r.RowKey == batch.Rows[0].RowKey);
         Assert.Equal(RowStatus.Done, r0.Status);
         Assert.Equal("99", r0.Get("targetPrice"));
@@ -124,7 +124,7 @@ public class LocalBatchStoreTests : IDisposable
     public async Task MoveToDone_relocates_folder_and_stamps_submitted()
     {
         var written = await _store.WriteFetchedBatchAsync(SampleFetch());
-        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.FolderName))!;
+        var batch = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Todo, written.GroupName, written.FolderName))!;
 
         await _store.MoveToDoneAsync(batch);
 
@@ -133,7 +133,7 @@ public class LocalBatchStoreTests : IDisposable
         Assert.False(Directory.Exists(todoDir));
         Assert.True(Directory.Exists(doneDir));
 
-        var done = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Done, written.FolderName))!;
+        var done = (await _store.GetBatchAsync(FlowType.Pricing, Emp, BatchLocation.Done, written.GroupName, written.FolderName))!;
         Assert.NotNull(done.SubmittedAt);
     }
 

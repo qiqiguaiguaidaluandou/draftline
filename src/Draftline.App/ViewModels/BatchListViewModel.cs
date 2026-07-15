@@ -89,7 +89,7 @@ public sealed partial class BatchListViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenBatch(BatchRowVM row) =>
-        _nav.ToBatchWork(_flow, _location, row.Batch.FolderName);
+        _nav.ToBatchWork(_flow, _location, row.Batch.GroupName, row.Batch.FolderName);
 
     /// <summary>手动同步：触发一次镜像同步，补齐服务器上已存在但本地尚未镜像的批次。</summary>
     [RelayCommand]

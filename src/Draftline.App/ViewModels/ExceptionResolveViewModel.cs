@@ -90,8 +90,9 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
             Title = $"异常补处理 · {_exception.MaterialCode}";
 
             // 来源批次仍在「已处理」里，挂起异常的行带 Status=Exception 留在其中。
+            // 必须带 GroupName 定位：核价下不同组可能有同一时间窗的同名批次，缺组会取错组的批次。
             _sourceBatch = await _store.GetBatchAsync(
-                _flow, _session.Operator.EmployeeId, BatchLocation.Done, _exception.SourceBatch);
+                _flow, _session.Operator.EmployeeId, BatchLocation.Done, _exception.GroupName, _exception.SourceBatch);
             var model = _sourceBatch?.Rows.FirstOrDefault(r => r.RowKey == _exception.RowKey);
 
             if (_sourceBatch is null || model is null)

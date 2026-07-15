@@ -118,42 +118,15 @@ public sealed class LocalBatchStore : ILocalBatchStore
     // ---------- 读取完整批次 ----------
 
     public async Task<Batch?> GetBatchAsync(
-        FlowType flow, string employeeId, BatchLocation location, string folderName, CancellationToken ct = default)
+        FlowType flow, string employeeId, BatchLocation location, string groupName, string folderName, CancellationToken ct = default)
     {
-        var rootDir = Path.Combine(Root, LocalFolders.FlowFolder(flow), LocalFolders.LocationFolder(location));
-        string? dir = null;
-        string groupName = "Center";
+        // 直接按「流程/状态/组/批次」定位（核价含组层级，挑图无组层级由 LocalBatchDir 自动忽略）。
+        // 关键：不再扫描"首个匹配同名时间窗的组"——核价下组1/组2 同一时间窗批次同名，
+        // 扫描会把不同组的批次误认成同一个，故必须用传入的确切组名定位。
+        var dir = LocalPaths.LocalBatchDir(Root, flow, location, groupName, folderName);
 
-        if (Directory.Exists(rootDir))
-        {
-            if (flow == FlowType.DrawingSelection)
-            {
-                var candidate = Path.Combine(rootDir, folderName);
-                if (Directory.Exists(candidate)) dir = candidate;
-            }
-            else
-            {
-                foreach (var groupDir in Directory.GetDirectories(rootDir))
-                {
-                    var candidate = Path.Combine(groupDir, folderName);
-                    if (Directory.Exists(candidate))
-                    {
-                        dir = candidate;
-                        groupName = Path.GetFileName(groupDir);
-                        break;
-                    }
-                }
-            }
-        }
-        
-        if (dir == null) return null;
+        if (!Directory.Exists(dir)) return null;
         if (!LocalPaths.TryParseFolderName(folderName, out var start, out var end)) return null;
-
-        // 最终兜底：如果 groupName 还是 Default，尝试从物理路径再取一次
-        if (groupName == "Default")
-        {
-            groupName = Path.GetFileName(Path.GetDirectoryName(dir)!) ?? "Default";
-        }
 
         var fields = _fields.FieldsFor(flow);
         var xlsxRows = ExcelGridIO.Read(LocalFolders.ResolveGridWorkbookPath(dir, flow, folderName), fields);

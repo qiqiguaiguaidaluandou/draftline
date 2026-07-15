@@ -14,7 +14,7 @@ public interface INavigationService
     event Action<ViewModelBase>? CurrentChanged;
 
     void ToBatchList(FlowType flow, BatchLocation location);
-    void ToBatchWork(FlowType flow, BatchLocation location, string folderName);
+    void ToBatchWork(FlowType flow, BatchLocation location, string groupName, string folderName);
     void ToExceptions(FlowType flow);
     void ToExceptionResolve(FlowType flow, ExceptionItem exception);
     void ToSettings();
@@ -32,8 +32,8 @@ public sealed class NavigationService : INavigationService
     public void ToBatchList(FlowType flow, BatchLocation location) =>
         Raise(ActivatorUtilities.CreateInstance<BatchListViewModel>(_sp, flow, location));
 
-    public void ToBatchWork(FlowType flow, BatchLocation location, string folderName) =>
-        Raise(ActivatorUtilities.CreateInstance<BatchWorkViewModel>(_sp, flow, location, folderName));
+    public void ToBatchWork(FlowType flow, BatchLocation location, string groupName, string folderName) =>
+        Raise(ActivatorUtilities.CreateInstance<BatchWorkViewModel>(_sp, flow, location, groupName, folderName));
 
     public void ToExceptions(FlowType flow) =>
         Raise(ActivatorUtilities.CreateInstance<ExceptionPoolViewModel>(_sp, flow));

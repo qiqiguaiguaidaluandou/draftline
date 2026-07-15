@@ -17,7 +17,7 @@ public interface ILocalBatchStore
     Task<IReadOnlyList<Batch>> ListBatchesAsync(FlowType flow, string employeeId, BatchLocation location, CancellationToken ct = default);
 
     /// <summary>读取一个批次的完整内容（清单表格.xlsx + manifest + 图纸有无校验）。</summary>
-    Task<Batch?> GetBatchAsync(FlowType flow, string employeeId, BatchLocation location, string folderName, CancellationToken ct = default);
+    Task<Batch?> GetBatchAsync(FlowType flow, string employeeId, BatchLocation location, string groupName, string folderName, CancellationToken ct = default);
 
     /// <summary>把取数结果落本地：在「待处理」建批次目录，写 xlsx + 图纸 + manifest。返回落地后的批次。</summary>
     Task<Batch> WriteFetchedBatchAsync(FetchResult fetched, CancellationToken ct = default);
