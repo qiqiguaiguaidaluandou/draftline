@@ -33,8 +33,13 @@ public class JwtTokenServiceTests
     {
         var svc = new JwtTokenService(Opt());
         var token = svc.Issue("10086");
-        // 篡改签名段（最后一个字符）
-        var tampered = token[..^1] + (token[^1] == 'A' ? 'B' : 'A');
+        // 篡改签名段：翻转其「首字符」。base64url 中末位字符可能只携带填充位——翻转它
+        // 有几率解码出同一串字节、签名依旧有效（此前偶发假失败的根因）；而任何非末位字符
+        // 都落在完整字节内，翻转必改变解码后的签名字节，保证令牌确实失效。
+        var parts = token.Split('.');
+        var sig = parts[2];
+        parts[2] = (sig[0] == 'A' ? 'B' : 'A') + sig[1..];
+        var tampered = string.Join('.', parts);
         Assert.Null(svc.ResolveEmployeeId(tampered));
     }
 
