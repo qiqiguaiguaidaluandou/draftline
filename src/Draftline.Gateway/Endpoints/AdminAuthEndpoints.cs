@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Draftline.Core.Logging;
 using Draftline.Gateway.Auth;
 using Draftline.Gateway.Stores;
 
@@ -25,15 +26,12 @@ public static class AdminAuthEndpoints
             var isAdmin = result.Success && op is not null
                 && await db.AppUsers.AnyAsync(u => u.EmployeeId == op!.EmployeeId && u.IsAdmin && u.IsActive);
 
-            db.ActivityLogs.Add(new ActivityLog
-            {
-                Action = "AdminLogin",
-                EmployeeId = op?.EmployeeId ?? (employeeId ?? "").Trim(),
-                Status = isAdmin ? "Success" : "Failed",
-                Payload = isAdmin ? null : (result.Success ? "非管理员，拒绝进入后台" : result.Message),
-                ClientIp = http.Connection.RemoteIpAddress?.ToString(),
-                Timestamp = DateTime.UtcNow,
-            });
+            db.LogActivity(
+                LogActions.AdminLogin,
+                op?.EmployeeId ?? (employeeId ?? "").Trim(),
+                clientIp: http.Connection.RemoteIpAddress?.ToString(),
+                status: isAdmin ? "Success" : "Failed",
+                payload: isAdmin ? null : (result.Success ? "非管理员，拒绝进入后台" : result.Message));
             await db.SaveChangesAsync();
 
             if (!isAdmin)

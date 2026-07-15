@@ -26,15 +26,12 @@ public static class ApiEndpoints
             var result = await auth.LoginAsync(req.EmployeeId, req.Password, ct);
 
             // 登录审计：成功/失败都记一条（失败工号取自请求体，仅作审计线索）。
-            db.ActivityLogs.Add(new ActivityLog
-            {
-                Action = "Login",
-                EmployeeId = result.Operator?.EmployeeId ?? (req.EmployeeId ?? "").Trim(),
-                Status = result.Success ? "Success" : "Failed",
-                Payload = result.Success ? null : result.Message,
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+            db.LogActivity(
+                LogActions.Login,
+                result.Operator?.EmployeeId ?? (req.EmployeeId ?? "").Trim(),
+                clientIp: Ip(ctx),
+                status: result.Success ? "Success" : "Failed",
+                payload: result.Success ? null : result.Message);
             await db.SaveChangesAsync(ct);
 
             return Results.Json(result);
@@ -49,15 +46,12 @@ public static class ApiEndpoints
             var empId = ctx.GetEmployeeId();
             var (ok, msg) = await auth.ChangePasswordAsync(empId, req.OldPassword, req.NewPassword, ct);
 
-            db.ActivityLogs.Add(new ActivityLog
-            {
-                Action = "ChangePassword",
-                EmployeeId = empId,
-                Status = ok ? "Success" : "Failed",
-                Payload = ok ? null : msg,
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+            db.LogActivity(
+                LogActions.ChangePassword,
+                empId,
+                clientIp: Ip(ctx),
+                status: ok ? "Success" : "Failed",
+                payload: ok ? null : msg);
             await db.SaveChangesAsync(ct);
 
             return Results.Json(ok ? ApiResult.Ok(msg) : ApiResult.Fail(msg));
@@ -132,25 +126,28 @@ public static class ApiEndpoints
                 return Results.NotFound(new { message = $"云端找不到该批次记录。BatchId: {req.BatchId}, Group: {req.GroupName}" });
             }
 
-            await store.UpdateExcelRowAsync(registry.Flow, req.GroupName, req.BatchId, req.RowKey, req.Values, ct);
+            var oldValues = await store.UpdateExcelRowAsync(registry.Flow, req.GroupName, req.BatchId, req.RowKey, req.Values, ct);
             registry.LastModified = DateTime.UtcNow;
 
-            db.ActivityLogs.Add(new ActivityLog
+            var changeSummary = LogText.DescribeChanges(req.Flow, oldValues, req.Values);
+
+            // 异常"补回传"链路（IsExceptionResolve）不单独记 UpdateRow——改动摘要经响应并入随后的 Resolve 日志，
+            // 避免一次异常回传刷出重复的改行日志。普通批次作业页编辑仍记 UpdateRow，带「老值→新值」明细。
+            if (!req.IsExceptionResolve)
             {
-                Action = "UpdateRow",
-                EmployeeId = empId,
-                Flow = req.Flow,
-                GroupName = req.GroupName,
-                BatchId = req.BatchId,
-                ImpactCount = 1,
-                Status = "Success",
-                Payload = $"Row: {req.RowKey}",
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+                db.LogActivity(
+                    LogActions.UpdateRow,
+                    empId,
+                    clientIp: Ip(ctx),
+                    flow: req.Flow,
+                    groupName: req.GroupName,
+                    batchId: req.BatchId,
+                    impactCount: 1,
+                    payload: $"数据行={req.RowKey}；物料={LogText.MaterialLabel(req.Flow, req.RowKey, req.Values)}；修改字段={(changeSummary.Length == 0 ? "无变化" : changeSummary)}");
+            }
 
             await db.SaveChangesAsync(ct);
-            return Results.Ok();
+            return Results.Json(new UpdateRowResult { ChangeSummary = changeSummary });
         });
 
         // 4. 异常挂起
@@ -173,19 +170,15 @@ public static class ApiEndpoints
             };
             db.Exceptions.Add(entity);
 
-            db.ActivityLogs.Add(new ActivityLog
-            {
-                Action = "Suspend",
-                EmployeeId = empId,
-                Flow = req.Flow,
-                GroupName = req.GroupName,
-                BatchId = req.BatchId,
-                ImpactCount = 1,
-                Status = "Success",
-                Payload = $"Row: {req.RowKey}, Reason: {req.Reason}",
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+            db.LogActivity(
+                LogActions.Suspend,
+                empId,
+                clientIp: Ip(ctx),
+                flow: req.Flow,
+                groupName: req.GroupName,
+                batchId: req.BatchId,
+                impactCount: 1,
+                payload: $"数据行={req.RowKey}；物料={req.MaterialCode}{(string.IsNullOrWhiteSpace(req.DisplayName) ? "" : " " + req.DisplayName)}；原因={req.Reason}");
 
             await db.SaveChangesAsync(ct);
             return Results.Ok();
@@ -221,7 +214,7 @@ public static class ApiEndpoints
         });
 
         // 6. 异常处理 (补回传或撤销)
-        api.MapPost("/batch/resolve-exception", async (string flow, string groupName, string batchId, string rowKey, HttpContext ctx, IPermissionService perm, DraftlineDbContext db, CancellationToken ct) =>
+        api.MapPost("/batch/resolve-exception", async (string flow, string groupName, string batchId, string rowKey, string? changeSummary, HttpContext ctx, IPermissionService perm, DraftlineDbContext db, CancellationToken ct) =>
         {
             if (!Enum.TryParse<FlowType>(flow, ignoreCase: true, out var flowType))
                 return Results.BadRequest("Invalid flow.");
@@ -239,19 +232,18 @@ public static class ApiEndpoints
                 entity.ResolvedAt = DateTime.UtcNow;
                 entity.ResolvedBy = empId;
 
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Resolve",
-                    EmployeeId = empId,
-                    Flow = entity.Flow,
-                    GroupName = groupName,
-                    BatchId = batchId,
-                    ImpactCount = 1,
-                    Status = "Success",
-                    Payload = $"Row: {rowKey}",
-                    ClientIp = Ip(ctx),
-                    Timestamp = DateTime.UtcNow
-                });
+                // changeSummary 非 null=补回传（含改动明细），null=撤销
+                db.LogActivity(
+                    LogActions.Resolve,
+                    empId,
+                    clientIp: Ip(ctx),
+                    flow: entity.Flow,
+                    groupName: groupName,
+                    batchId: batchId,
+                    impactCount: 1,
+                    payload: $"数据行={rowKey}；物料={entity.MaterialCode}{(string.IsNullOrWhiteSpace(entity.DisplayName) ? "" : " " + entity.DisplayName)}"
+                             + $"；方式={(changeSummary is null ? "撤销" : "补回传")}"
+                             + (string.IsNullOrEmpty(changeSummary) ? "" : $"；修改字段={changeSummary}"));
 
                 await db.SaveChangesAsync(ct);
             }
@@ -285,19 +277,15 @@ public static class ApiEndpoints
             await store.AppendDrawingsAsync(req.Flow, req.GroupName, req.BatchId, fetched, ct);
             registry.LastModified = DateTime.UtcNow;
 
-            db.ActivityLogs.Add(new ActivityLog
-            {
-                Action = "RefetchDrawing",
-                EmployeeId = empId,
-                Flow = req.Flow,
-                GroupName = req.GroupName,
-                BatchId = req.BatchId,
-                ImpactCount = fetched.Count,
-                Status = "Success",
-                Payload = $"Row: {req.RowKey}, Files: {string.Join(", ", fetched.Select(f => f.FileName))}",
-                ClientIp = Ip(ctx),
-                Timestamp = DateTime.UtcNow
-            });
+            db.LogActivity(
+                LogActions.RefetchDrawing,
+                empId,
+                clientIp: Ip(ctx),
+                flow: req.Flow,
+                groupName: req.GroupName,
+                batchId: req.BatchId,
+                impactCount: fetched.Count,
+                payload: $"数据行={req.RowKey}；物料={req.MaterialCode}；新增图纸={string.Join("、", fetched.Select(f => f.FileName))}");
 
             await db.SaveChangesAsync(ct);
 
@@ -315,7 +303,7 @@ public static class ApiEndpoints
             if (!await perm.HasAccessAsync(empId, req.Flow, req.GroupName, ct)) return Results.Forbid();
 
             var target = req.Flow == FlowType.Pricing ? "SRM" : "EBS";
-            var retryTag = req.IsExceptionRetry ? "，重新回传" : ""; // 落入 payload，供日志区分「重新回传」
+            var retryTag = req.IsExceptionRetry ? "；重新回传" : ""; // 落入 payload，供日志区分「重新回传」（LogText.IsResubmit 据此判定）
 
             var registry = await db.BatchRegistries.FirstOrDefaultAsync(b => b.BatchId == req.BatchKey && b.Flow == req.Flow && b.GroupName == req.GroupName, ct);
             if (registry == null) return Results.NotFound(new { message = "云端找不到批次记录。" });
@@ -340,13 +328,10 @@ public static class ApiEndpoints
             }
             catch (Exception ex)
             {
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
-                    ImpactCount = 0, Status = "Failed",
-                    Payload = $"Target: {target}{retryTag}, 回传调用失败（可重试）: {ex.Message}",
-                    ClientIp = Ip(ctx), Timestamp = DateTime.UtcNow,
-                });
+                db.LogActivity(
+                    LogActions.Submit, empId, clientIp: Ip(ctx), flow: req.Flow, groupName: req.GroupName, batchId: req.BatchKey,
+                    impactCount: 0, status: "Failed",
+                    payload: $"回传目标={target}{retryTag}；回传调用失败（可重试）：{ex.Message}");
                 await db.SaveChangesAsync(ct);
                 return Results.Json(new SubmitResult { Success = false, Message = $"回传 {target} 失败，批次未完成，可重试。" });
             }
@@ -391,13 +376,10 @@ public static class ApiEndpoints
                 }
 
                 var detail = string.Join("; ", failedRows.Select(r => $"{r.RowKey}({r.Message})"));
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Submit", EmployeeId = empId, Flow = req.Flow, GroupName = req.GroupName, BatchId = req.BatchKey,
-                    ImpactCount = failedRows.Count, Status = "Failed",
-                    Payload = $"Target: {target}{retryTag}, 永久失败行(已转入异常池，不重试): {detail}",
-                    ClientIp = Ip(ctx), Timestamp = DateTime.UtcNow,
-                });
+                db.LogActivity(
+                    LogActions.Submit, empId, clientIp: Ip(ctx), flow: req.Flow, groupName: req.GroupName, batchId: req.BatchKey,
+                    impactCount: failedRows.Count, status: "Failed",
+                    payload: $"回传目标={target}{retryTag}；永久失败行(已转入异常池，不重试)：{detail}");
             }
 
             // 批次完成：置 Done + 结构化审计（窗口起止 / AuditId 落独立列，供 audit/exists 精确查）。
@@ -410,22 +392,20 @@ public static class ApiEndpoints
             // 成功日志仅当确有成功行才写：全失败时只保留上面的失败日志，避免"成功0行+失败"两条并存。
             if (successCount > 0)
             {
-                db.ActivityLogs.Add(new ActivityLog
-                {
-                    Action = "Submit",
-                    EmployeeId = empId,
-                    Flow = req.Flow,
-                    GroupName = req.GroupName,
-                    BatchId = req.BatchKey,
-                    ImpactCount = successCount,
-                    Status = "Success",
-                    WindowStart = req.WindowStart.ToUniversalTime(),
-                    WindowEnd = req.WindowEnd.ToUniversalTime(),
-                    AuditId = auditId,
-                    Payload = $"Target: {target}{retryTag}",
-                    ClientIp = Ip(ctx),
-                    Timestamp = DateTime.UtcNow
-                });
+                // 回传成功是唯一填结构化审计列的动作：LogActivity 建记录后补 WindowStart/End/AuditId
+                // （补拉判据据这三列精确查，见 #009）。
+                var log = db.LogActivity(
+                    LogActions.Submit,
+                    empId,
+                    clientIp: Ip(ctx),
+                    flow: req.Flow,
+                    groupName: req.GroupName,
+                    batchId: req.BatchKey,
+                    impactCount: successCount,
+                    payload: $"回传目标={target}；成功={successCount}/{registry.TotalRows}行{retryTag}");
+                log.WindowStart = req.WindowStart.ToUniversalTime();
+                log.WindowEnd = req.WindowEnd.ToUniversalTime();
+                log.AuditId = auditId;
             }
 
             await db.SaveChangesAsync(ct);
@@ -439,23 +419,6 @@ public static class ApiEndpoints
                     ? $"已回传 {successCount} 行至 {target}；{failedRows.Count} 行失败已留痕（如物料不存在，不重试）。"
                     : $"已回传 {req.Rows.Count} 行至 {target}。",
             });
-        });
-
-        // 用户操作日志：客户端上报本人行为（工号以令牌为准，防伪造）。
-        // 此前缺失该端点，客户端 fire-and-forget 上报被静默丢弃——此处补上。
-        api.MapPost("/oplog", (OperationLogEntry req, HttpContext ctx, IOperationLogStore store) =>
-        {
-            var empId = ctx.GetEmployeeId();
-            store.Append(new OperationLogEntry
-            {
-                Operation = req.Operation,
-                FormName = req.FormName,
-                OperatedAt = req.OperatedAt,
-                Flow = req.Flow,
-                ClientIp = req.ClientIp ?? Ip(ctx), // 优先客户端本机局域网 IP，缺失则回退连接 IP
-                EmployeeId = empId,                 // 以令牌盖章，忽略请求体工号
-            });
-            return Results.Ok();
         });
 
         // 用户操作日志：查本人记录（操作员视角——只看本人的业务操作 + 登录/改密，
@@ -473,7 +436,7 @@ public static class ApiEndpoints
             var items = rows.Select(r => new OperationLogEntry
             {
                 EmployeeId = empId,
-                Operation = r.Action == "Submit"
+                Operation = r.Action == LogActions.Submit
                     ? LogText.SubmitLabel(r.Flow, LogText.IsResubmit(r.Payload)) // 提交回传/重新回传 + 目标(SRM/EBS)
                     : LogText.ActionLabel(r.Action),
                 FormName = r.BatchId ?? "",
@@ -497,7 +460,7 @@ public static class ApiEndpoints
             var empId = ctx.GetEmployeeId();
 
             var hit = await db.ActivityLogs
-                .Where(r => r.Flow == flowType && r.EmployeeId == empId && r.Action == "Submit" && r.Status == "Success"
+                .Where(r => r.Flow == flowType && r.EmployeeId == empId && r.Action == LogActions.Submit && r.Status == "Success"
                             && r.WindowStart == wsUtc && r.WindowEnd == weUtc)
                 .OrderByDescending(r => r.Timestamp)
                 .FirstOrDefaultAsync(ct);

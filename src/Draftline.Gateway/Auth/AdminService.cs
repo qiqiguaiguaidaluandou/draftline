@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Draftline.Core.Contracts.Http;
+using Draftline.Core.Logging;
 using Draftline.Gateway.Stores;
 
 namespace Draftline.Gateway.Auth;
@@ -91,7 +92,7 @@ public sealed class AdminService : IAdminService
             IsAdmin = req.IsAdmin,
             MustChangePassword = true,
         });
-        Log(actor, ip, "AdminCreateUser", $"empId={empId}, admin={req.IsAdmin}");
+        Log(actor, ip, LogActions.AdminCreateUser, $"工号={empId}；管理员={(req.IsAdmin ? "是" : "否")}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已创建用户 {empId}。");
     }
@@ -109,7 +110,7 @@ public sealed class AdminService : IAdminService
         user.FailedAttempts = 0;
         user.LockoutUntil = null;
         user.UpdatedAt = DateTime.UtcNow;
-        Log(actor, ip, "AdminResetPassword", $"empId={employeeId}");
+        Log(actor, ip, LogActions.AdminResetPassword, $"工号={employeeId}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已重置 {employeeId} 的密码。");
     }
@@ -135,7 +136,7 @@ public sealed class AdminService : IAdminService
         user.IsActive = isActive;
         if (isActive) { user.FailedAttempts = 0; user.LockoutUntil = null; }
         user.UpdatedAt = DateTime.UtcNow;
-        Log(actor, ip, "AdminSetActive", $"empId={employeeId}, active={isActive}");
+        Log(actor, ip, LogActions.AdminSetActive, $"工号={employeeId}；启用={(isActive ? "是" : "否")}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已{(isActive ? "启用" : "停用")} {employeeId}。");
     }
@@ -155,7 +156,7 @@ public sealed class AdminService : IAdminService
         foreach (var rid in validIds)
             _db.UserRoles.Add(new UserRole { EmployeeId = employeeId, RoleId = rid });
 
-        Log(actor, ip, "AdminSetUserRoles", $"empId={employeeId}, roles=[{string.Join(",", validIds)}]");
+        Log(actor, ip, LogActions.AdminSetUserRoles, $"工号={employeeId}；角色=[{string.Join(",", validIds)}]");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已更新 {employeeId} 的角色。");
     }
@@ -186,7 +187,7 @@ public sealed class AdminService : IAdminService
 
         var role = new Role { Name = name, Description = req.Description, Permissions = BuildPermissions(req.Permissions) };
         _db.Roles.Add(role);
-        Log(actor, ip, "AdminCreateRole", $"name={name}, ranges={role.Permissions.Count}");
+        Log(actor, ip, LogActions.AdminCreateRole, $"名称={name}；数据范围数={role.Permissions.Count}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已创建角色 {name}。");
     }
@@ -207,7 +208,7 @@ public sealed class AdminService : IAdminService
         role.Permissions.Clear();
         foreach (var rp in BuildPermissions(req.Permissions)) role.Permissions.Add(rp);
 
-        Log(actor, ip, "AdminUpdateRole", $"id={id}, name={name}, ranges={role.Permissions.Count}");
+        Log(actor, ip, LogActions.AdminUpdateRole, $"ID={id}；名称={name}；数据范围数={role.Permissions.Count}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已更新角色 {name}。");
     }
@@ -218,7 +219,7 @@ public sealed class AdminService : IAdminService
         if (role is null) return ApiResult.Fail("角色不存在。");
 
         _db.Roles.Remove(role);
-        Log(actor, ip, "AdminDeleteRole", $"id={id}, name={role.Name}");
+        Log(actor, ip, LogActions.AdminDeleteRole, $"ID={id}；名称={role.Name}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已删除角色 {role.Name}。");
     }
@@ -274,15 +275,7 @@ public sealed class AdminService : IAdminService
     // ---------- 辅助 ----------
 
     private void Log(string actor, string? ip, string action, string payload) =>
-        _db.ActivityLogs.Add(new ActivityLog
-        {
-            Action = action,
-            EmployeeId = actor,
-            Status = "Success",
-            Payload = payload,
-            ClientIp = ip,
-            Timestamp = DateTime.UtcNow,
-        });
+        _db.LogActivity(action, actor, clientIp: ip, payload: payload);
 
     private static List<RolePermission> BuildPermissions(List<PermissionDto> input) =>
         input.Where(p => !string.IsNullOrWhiteSpace(p.GroupName))

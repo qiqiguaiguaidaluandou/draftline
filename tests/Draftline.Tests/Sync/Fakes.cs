@@ -72,10 +72,10 @@ internal sealed class FakeDataGateway : IDataGateway
 
     public Task<List<BatchCatalogItem>> GetCatalogAsync(CancellationToken ct = default) => Task.FromResult(Catalog);
     public Task<byte[]> DownloadFileAsync(FlowType flow, string groupName, string batchId, string fileName, CancellationToken ct = default) => Task.FromResult(Array.Empty<byte>());
-    public Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<UpdateRowResult> UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default) => Task.FromResult(new UpdateRowResult());
     public Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default) => Task.CompletedTask;
     public Task<List<ExceptionItem>> GetExceptionsAsync(CancellationToken ct = default) => Task.FromResult(new List<ExceptionItem>());
-    public Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, CancellationToken ct = default) => Task.CompletedTask;
+    public Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, string? changeSummary = null, CancellationToken ct = default) => Task.CompletedTask;
     public Task<RefetchDrawingResult> RefetchDrawingAsync(RefetchDrawingRequest request, CancellationToken ct = default) => Task.FromResult(new RefetchDrawingResult { Found = false });
 }
 

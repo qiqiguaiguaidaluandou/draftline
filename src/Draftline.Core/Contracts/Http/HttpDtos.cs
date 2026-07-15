@@ -188,8 +188,9 @@ public sealed class AuditExistsResponse
 }
 
 /// <summary>
-/// 用户操作日志一条（集中上报）。管理员在服务器侧查全部，操作员在 App 内只查自己（按令牌工号过滤）。
-/// 记录时机：回传/补回传成功之后。本期只记这两个动作，后续可扩展（加 Operation 取值即可）。
+/// 用户操作日志一条。操作员在 App 内只查自己（GET /api/oplog/mine，按令牌工号过滤），管理员在后台查全部。
+/// 数据源是服务端各端点写的权威动作日志（ActivityLogs）——客户端不再单独上报（#030 阶段 2）；
+/// 本 DTO 现仅用于 /oplog/mine 查询的响应投影。
 /// </summary>
 public sealed class OperationLogEntry
 {

@@ -31,9 +31,10 @@ public interface IServerBatchStore
     Stream? OpenFile(FlowType flow, string groupName, string batchId, string fileName);
 
     /// <summary>
-    /// 更新 Excel 中的一行数据。
+    /// 更新 Excel 中的一行数据。返回被改动单元格的**旧值**（字段 Key → 旧值），供调用方生成
+    /// 「老值→新值」变更摘要写入日志；未命中该行时返回空字典。
     /// </summary>
-    Task UpdateExcelRowAsync(FlowType flow, string groupName, string batchId, string rowKey, Dictionary<string, string?> values, CancellationToken ct = default);
+    Task<IReadOnlyDictionary<string, string?>> UpdateExcelRowAsync(FlowType flow, string groupName, string batchId, string rowKey, Dictionary<string, string?> values, CancellationToken ct = default);
 
     /// <summary>
     /// 移动批次到完成目录（方案二下通常为 no-op）。

@@ -2,6 +2,7 @@ using System.Globalization;
 using Draftline.Core.Contracts;
 using Draftline.Core.Contracts.Http;
 using Draftline.Core.Enums;
+using Draftline.Core.Logging;
 using Draftline.Core.Models;
 using Draftline.Core.Schemas;
 using Draftline.Gateway.AntiCorruption;
@@ -117,9 +118,8 @@ public sealed class DataIngestionService : BackgroundService
     }
 
     /// <summary>
-    /// 分层清理 ActivityLogs（唯一一张日志表，靠 Action 区分种类）。按性质分三档保留，各自可配、各自阈值：
+    /// 分层清理 ActivityLogs（唯一一张日志表，靠 Action 区分种类）。按性质分两档保留，各自可配、各自阈值：
     ///   审计(Action="Submit")：RetentionDaysForAuditLog，默认 180 天（追溯价值最高，留久）；
-    ///   行为埋点(Action="Behavior")：RetentionDaysForBehaviorLog，默认 30 天（与各端点动作日志高度冗余，短留）；
     ///   其余(登录/改密/改行/挂起/处理/取图/系统 Ingest/后台 Admin*)：RetentionDaysForOperationLog，默认 90 天。
     /// 任一档配 &lt;= 0 视为"永久保留"（跳过该档删除），作为不清理的逃生阀。
     /// 用 ExecuteDeleteAsync 直接下发 DELETE，不把行读进内存。
@@ -127,7 +127,6 @@ public sealed class DataIngestionService : BackgroundService
     private async Task CleanupOldLogsAsync(CancellationToken ct)
     {
         var auditDays = _config.GetValue<int>("Config:RetentionDaysForAuditLog", 180);
-        var behaviorDays = _config.GetValue<int>("Config:RetentionDaysForBehaviorLog", 30);
         var operationDays = _config.GetValue<int>("Config:RetentionDaysForOperationLog", 90);
 
         var now = DateTime.UtcNow;
@@ -137,27 +136,21 @@ public sealed class DataIngestionService : BackgroundService
 
         var auditRemoved = auditDays > 0
             ? await db.ActivityLogs
-                .Where(x => x.Action == "Submit" && x.Timestamp < now.AddDays(-auditDays))
-                .ExecuteDeleteAsync(ct)
-            : 0;
-
-        var behaviorRemoved = behaviorDays > 0
-            ? await db.ActivityLogs
-                .Where(x => x.Action == "Behavior" && x.Timestamp < now.AddDays(-behaviorDays))
+                .Where(x => x.Action == LogActions.Submit && x.Timestamp < now.AddDays(-auditDays))
                 .ExecuteDeleteAsync(ct)
             : 0;
 
         var operationRemoved = operationDays > 0
             ? await db.ActivityLogs
-                .Where(x => x.Action != "Submit" && x.Action != "Behavior" && x.Timestamp < now.AddDays(-operationDays))
+                .Where(x => x.Action != LogActions.Submit && x.Timestamp < now.AddDays(-operationDays))
                 .ExecuteDeleteAsync(ct)
             : 0;
 
-        var total = auditRemoved + behaviorRemoved + operationRemoved;
+        var total = auditRemoved + operationRemoved;
         if (total > 0)
             _logger.LogInformation(
-                "Log cleanup completed. Removed {Total} activity logs (audit {Audit}@{AuditDays}d, behavior {Behavior}@{BehaviorDays}d, operation {Op}@{OpDays}d).",
-                total, auditRemoved, auditDays, behaviorRemoved, behaviorDays, operationRemoved, operationDays);
+                "Log cleanup completed. Removed {Total} activity logs (audit {Audit}@{AuditDays}d, operation {Op}@{OpDays}d).",
+                total, auditRemoved, auditDays, operationRemoved, operationDays);
     }
 
     // 采集排程的唯一权威定义在 Draftline.Core.Schemas.IngestionSchedules（客户端补拉/后台展示共用同一套）。
@@ -433,18 +426,16 @@ public sealed class DataIngestionService : BackgroundService
         }
 
         // 6. 记录系统日志（空窗自动完结单独留痕，便于审计区分）
-        db.ActivityLogs.Add(new ActivityLog
-        {
-            Action = "Ingest",
-            EmployeeId = "SYSTEM",
-            Flow = flow,
-            GroupName = groupName,
-            BatchId = batchId,
-            ImpactCount = rows.Count,
-            Status = isEmpty ? "EmptyAutoDone" : "Success",
-            AuditId = emptyAuditId,
-            Timestamp = DateTime.UtcNow
-        });
+        var log = db.LogActivity(
+            LogActions.Ingest,
+            "SYSTEM",
+            flow: flow,
+            groupName: groupName,
+            batchId: batchId,
+            impactCount: rows.Count,
+            status: isEmpty ? "EmptyAutoDone" : "Success",
+            payload: $"窗口={ws:MM-dd HH:mm}~{we:MM-dd HH:mm}；取数={rows.Count}行{(isEmpty ? "（空窗自动完结）" : "")}");
+        log.AuditId = emptyAuditId; // 空窗自动完结批次的审计号（非空窗为 null）
 
         await db.SaveChangesAsync(ct);
     }

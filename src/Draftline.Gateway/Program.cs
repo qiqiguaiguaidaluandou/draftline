@@ -67,8 +67,6 @@ builder.Services.AddSingleton<IFieldProvider, ServerFieldProvider>();
 // ---------- 存储服务 ----------
 builder.Services.AddSingleton<IServerBatchStore, FileServerBatchStore>();
 builder.Services.AddSingleton<IConfigStore, InMemoryConfigStore>();
-builder.Services.AddScoped<IAuditStore, PgAuditStore>();
-builder.Services.AddScoped<IOperationLogStore, PgOperationLogStore>();
 
 // ---------- 后台采集服务（按计划主动取数） ----------
 builder.Services.AddHostedService<DataIngestionService>();

@@ -25,7 +25,6 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     private readonly INavigationService _nav;
     private readonly IDialogService _dialog;
     private readonly IExplorerService _explorer;
-    private readonly IOperationLogGateway _opLog;
 
     private readonly FlowType _flow;
     private readonly BatchLocation _location;
@@ -35,7 +34,6 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
     public BatchWorkViewModel(
         ILocalBatchStore store, IDataGateway data, ISubmitGateway submit, IFieldProvider fieldProvider,
         ISession session, INavigationService nav, IDialogService dialog, IExplorerService explorer,
-        IOperationLogGateway opLog,
         FlowType flow, BatchLocation location, string folderName)
     {
         _store = store;
@@ -46,7 +44,6 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         _nav = nav;
         _dialog = dialog;
         _explorer = explorer;
-        _opLog = opLog;
         _flow = flow;
         _location = location;
         _folderName = folderName;
@@ -232,8 +229,6 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
             // 持久化"行↔图纸"关联到本地 manifest（不动行状态/填写进度）。
             await _store.AddRowDrawingsAsync(_flow, _batch.GroupName, _batch.Key, _location, row.RowKey, result.Files);
 
-            OperationLog.Record(_opLog, "重新获取图纸", _batch.FolderName, _flow, _session.Operator.EmployeeId);
-
             _dialog.Success($"图纸获取成功：料号「{code}」已拉取 {result.Files.Count} 张图纸（同名覆盖、新增追加）。" +
                             "可点「打开文件夹（含图纸）」查看。");
         }
@@ -309,9 +304,6 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
                 _dialog.Error(result.Message ?? "回传失败，请重试。");
                 return;
             }
-
-            // 成功：记一条操作日志（fire-and-forget，记录失败不影响回传）。
-            OperationLog.Record(_opLog, SubmitButtonText, _batch.FolderName, _flow, _session.Operator.EmployeeId);
 
             // 逐行结果：成功行→已上传；被目标系统永久退回的行（如“物料不存在”）→挂异常池，
             // 与手动挂起的异常同等对待，可在“异常解决”页补回传（待主数据修正后重提）。

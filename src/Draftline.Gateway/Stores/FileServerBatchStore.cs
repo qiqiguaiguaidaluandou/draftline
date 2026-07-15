@@ -128,8 +128,9 @@ public sealed class FileServerBatchStore : IServerBatchStore
         return File.Exists(path) ? File.OpenRead(path) : null;
     }
 
-    public async Task UpdateExcelRowAsync(FlowType flow, string groupName, string batchId, string rowKey, Dictionary<string, string?> values, CancellationToken ct = default)
+    public async Task<IReadOnlyDictionary<string, string?>> UpdateExcelRowAsync(FlowType flow, string groupName, string batchId, string rowKey, Dictionary<string, string?> values, CancellationToken ct = default)
     {
+        var oldValues = new Dictionary<string, string?>(); // 字段 Key → 改写前旧值，供调用方做变更摘要
         var dir = GetBatchPath(flow, groupName, batchId);
         // 读旧批次兼容无前缀命名；写回一律用新命名（含流程前缀），并在迁移后删掉旧文件。
         var readPath = LocalFolders.ResolveGridWorkbookPath(dir, flow, batchId);
@@ -184,6 +185,7 @@ public sealed class FileServerBatchStore : IServerBatchStore
                         if (keyToCol.TryGetValue(key, out var colIdx))
                         {
                             var cell = row.GetCell(colIdx) ?? row.CreateCell(colIdx);
+                            oldValues[key] = cell.ToString(); // 捕获旧值须在 SetCellValue 之前
                             cell.SetCellValue(val ?? "");
                         }
                     }
@@ -212,6 +214,8 @@ public sealed class FileServerBatchStore : IServerBatchStore
         {
             sem.Release();
         }
+
+        return oldValues;
     }
 
     public Task MoveToDoneAsync(FlowType flow, string groupName, string batchId, CancellationToken ct = default)

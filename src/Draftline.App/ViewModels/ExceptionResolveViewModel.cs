@@ -26,7 +26,6 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
     private readonly INavigationService _nav;
     private readonly IDialogService _dialog;
     private readonly IExplorerService _explorer;
-    private readonly IOperationLogGateway _opLog;
 
     private readonly FlowType _flow;
     private readonly ExceptionItem _exception;
@@ -35,7 +34,6 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
     public ExceptionResolveViewModel(
         ILocalBatchStore store, IDataGateway data, ISubmitGateway submit, IFieldProvider fieldProvider,
         ISession session, INavigationService nav, IDialogService dialog, IExplorerService explorer,
-        IOperationLogGateway opLog,
         FlowType flow, ExceptionItem exception)
     {
         _store = store;
@@ -46,7 +44,6 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
         _nav = nav;
         _dialog = dialog;
         _explorer = explorer;
-        _opLog = opLog;
         _flow = flow;
         _exception = exception;
 
@@ -194,8 +191,6 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
             // 持久化"行↔图纸"关联到本地 manifest（不动行状态：此时尚未回传，仍属异常）。
             await _store.AddRowDrawingsAsync(_flow, groupName, _sourceBatch.Key, BatchLocation.Done, Row.RowKey, result.Files);
 
-            OperationLog.Record(_opLog, "重新获取图纸", _exception.SourceBatch, _flow, _session.Operator.EmployeeId);
-
             _dialog.Success($"图纸获取成功：已拉取 {result.Files.Count} 张图纸到本批次文件夹。" +
                             $"可点「打开来源批次（含图纸）」查看，确认后再「{SubmitButtonText}」。");
         }
@@ -272,18 +267,17 @@ public sealed partial class ExceptionResolveViewModel : ViewModelBase
             }
 
             // --- Remote-First: 同步服务器状态 ---
-            await _data.UpdateRowAsync(new UpdateRowRequest
+            var updateResult = await _data.UpdateRowAsync(new UpdateRowRequest
             {
                 Flow = _flow,
                 GroupName = groupName,
                 BatchId = _exception.SourceBatch,
                 RowKey = Row.RowKey,
-                Values = new Dictionary<string, string?>(Row.Model.Values)
+                Values = new Dictionary<string, string?>(Row.Model.Values),
+                IsExceptionResolve = true, // 补回传链路：服务端不单独记 UpdateRow，改动并入随后的 Resolve 日志
             });
-            await _data.ResolveExceptionAsync(_flow, groupName, _exception.SourceBatch, Row.RowKey);
-
-            // 成功：记一条操作日志（fire-and-forget，记录失败不影响回传）。
-            OperationLog.Record(_opLog, SubmitButtonText, _exception.SourceBatch, _flow, _session.Operator.EmployeeId);
+            // 传非 null 的改动摘要（可为空串）→ 服务端据此把本条 Resolve 记为「补回传」而非「撤销」
+            await _data.ResolveExceptionAsync(_flow, groupName, _exception.SourceBatch, Row.RowKey, updateResult.ChangeSummary);
 
             // 该行→已上传，写回来源批次（xlsx+manifest）；再从异常池移除。
             Row.MarkUploaded();

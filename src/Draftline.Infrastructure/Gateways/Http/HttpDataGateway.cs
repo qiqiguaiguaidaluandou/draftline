@@ -84,10 +84,11 @@ public sealed class HttpDataGateway : IDataGateway
         return await _http.GetByteArrayAsync(url, ct);
     }
 
-    public async Task UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default)
+    public async Task<UpdateRowResult> UpdateRowAsync(UpdateRowRequest request, CancellationToken ct = default)
     {
         using var resp = await _http.PostAsJsonAsync("/api/batch/update-row", request, HttpJson.Options, ct);
         resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<UpdateRowResult>(HttpJson.Options, ct) ?? new UpdateRowResult();
     }
 
     public async Task SuspendExceptionAsync(SuspendExceptionRequest request, CancellationToken ct = default)
@@ -102,9 +103,10 @@ public sealed class HttpDataGateway : IDataGateway
                ?? new();
     }
 
-    public async Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, CancellationToken ct = default)
+    public async Task ResolveExceptionAsync(FlowType flow, string groupName, string batchId, string rowKey, string? changeSummary = null, CancellationToken ct = default)
     {
         var url = $"/api/batch/resolve-exception?flow={flow}&groupName={Uri.EscapeDataString(groupName)}&batchId={Uri.EscapeDataString(batchId)}&rowKey={Uri.EscapeDataString(rowKey)}";
+        if (changeSummary is not null) url += $"&changeSummary={Uri.EscapeDataString(changeSummary)}";
         using var resp = await _http.PostAsync(url, null, ct);
         resp.EnsureSuccessStatusCode();
     }
