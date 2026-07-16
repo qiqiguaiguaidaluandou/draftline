@@ -136,4 +136,43 @@ public class BatchSyncServiceTests
         }
         finally { TempDir.Delete(root); }
     }
+
+    [Fact]
+    public async Task MirrorSync_prunes_local_drawing_batch_absent_from_catalog()
+    {
+        // 回归（032）：挑图本地目录扁平（位置/批次，无组层，组名恒 "Center"）。
+        // prune 曾套用核价的两层枚举，导致挑图孤儿批次一个都枚举不到 → 云端过期清理后本地永不删。
+        var (svc, store, data, _) = Build();
+        var root = TempDir.Create();
+        try
+        {
+            store.Root = root;
+
+            // 本地一个挑图已处理批次，云端 catalog 已无（模拟被过期清理）。
+            var staleBatchId = LocalPaths.BatchFolderName(DateTime.Now.AddHours(-2), DateTime.Now.AddHours(-1));
+            var staleDir = LocalPaths.LocalBatchDir(root, FlowType.DrawingSelection, BatchLocation.Done, "Center", staleBatchId);
+            Directory.CreateDirectory(staleDir);
+
+            // 另置一个云端仍存在的挑图批次，验证不会被误删。
+            var keepBatchId = LocalPaths.BatchFolderName(DateTime.Now.AddMinutes(-30), DateTime.Now);
+            var keepDir = LocalPaths.LocalBatchDir(root, FlowType.DrawingSelection, BatchLocation.Done, "Center", keepBatchId);
+            Directory.CreateDirectory(keepDir);
+            data.Catalog.Add(new BatchCatalogItem
+            {
+                BatchId = keepBatchId,
+                Flow = FlowType.DrawingSelection,
+                GroupName = "Center", // 挑图云端组名恒为 Center
+                Status = BatchLocation.Done,
+                TotalRows = 5,
+                LastModified = DateTime.Now
+            });
+
+            var result = await svc.MirrorSyncAsync(Emp, new[] { FlowType.DrawingSelection });
+
+            Assert.False(Directory.Exists(staleDir)); // 云端已无 → 本地删除
+            Assert.True(Directory.Exists(keepDir));    // 云端仍在 → 本地保留
+            Assert.Equal(1, result.Pruned);
+        }
+        finally { TempDir.Delete(root); }
+    }
 }

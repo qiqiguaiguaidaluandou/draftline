@@ -143,7 +143,7 @@ public sealed class BatchSyncService
                 var locationRoot = LocalPaths.LocalLocationRoot(localRoot, flow, location);
                 if (!Directory.Exists(locationRoot)) continue;
 
-                foreach (var (groupName, batchDir) in EnumerateLocalBatchDirs(locationRoot))
+                foreach (var (groupName, batchDir) in EnumerateLocalBatchDirs(locationRoot, flow))
                 {
                     ct.ThrowIfCancellationRequested();
                     var batchId = Path.GetFileName(batchDir);
@@ -191,10 +191,22 @@ public sealed class BatchSyncService
 
     /// <summary>
     /// 枚举某"位置根"（如 核价/待处理）下的本地批次目录，返回 (组名, 批次目录全路径)。
-    /// 目录层级固定为 位置/组/批次（挑图组名恒为 "Center"，核价为组名），故取两层。
+    /// 目录层级随流程不同（须与 <see cref="LocalPaths.LocalGroupRoot"/> 一致）：
+    ///   · 核价：位置/组/批次（两层，组名取目录名）；
+    ///   · 挑图：位置/批次（扁平、无组层，组名恒为 "Center"）——组名必须与云端 catalog 里挑图
+    ///     GroupName="Center" 对齐，否则镜像删除的键匹配不上、挑图本地孤儿批次永不被清理。
     /// </summary>
-    private static IEnumerable<(string GroupName, string BatchDir)> EnumerateLocalBatchDirs(string locationRoot)
+    private static IEnumerable<(string GroupName, string BatchDir)> EnumerateLocalBatchDirs(string locationRoot, FlowType flow)
     {
+        // 挑图：状态目录下第一层直接是批次目录（无组层），组名统一 "Center"。
+        if (flow == FlowType.DrawingSelection)
+        {
+            foreach (var batchDir in Directory.GetDirectories(locationRoot))
+                yield return ("Center", batchDir);
+            yield break;
+        }
+
+        // 核价：位置/组/批次 两层。
         foreach (var groupDir in Directory.GetDirectories(locationRoot))
         {
             var groupName = Path.GetFileName(groupDir);
