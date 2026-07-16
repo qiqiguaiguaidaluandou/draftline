@@ -7,6 +7,7 @@ using Draftline.Core.Contracts;
 using Draftline.Core.Contracts.Http;
 using Draftline.Core.Enums;
 using Draftline.Core.Models;
+using Draftline.Core.Schemas;
 using Draftline.Core.Validation;
 
 namespace Draftline.App.ViewModels;
@@ -53,9 +54,25 @@ public sealed partial class BatchWorkViewModel : ViewModelBase
         Fields = _fieldProvider.FieldsFor(flow);
         IsReadOnly = location == BatchLocation.Done;
         TargetSystem = flow == FlowType.Pricing ? "SRM" : "EBS";
+
+        // 可筛选列（Excel 风表头 ▼）：核价=物料编码/型号/名称/变更状态；挑图=产品线/申请人名称/项目。
+        FilterableKeys = flow == FlowType.Pricing
+            ? new HashSet<string>
+            {
+                FieldSchemas.PricingKeys.MaterialCode, FieldSchemas.PricingKeys.Model,
+                FieldSchemas.PricingKeys.Name, FieldSchemas.PricingKeys.HasChange,
+            }
+            : new HashSet<string>
+            {
+                FieldSchemas.DrawingKeys.ProductLine, FieldSchemas.DrawingKeys.Applicant,
+                FieldSchemas.DrawingKeys.Project,
+            };
     }
 
     public IReadOnlyList<FieldDefinition> Fields { get; }
+
+    /// <summary>启用表头筛选（▼）的列键集合；仅影响显示，统计与提交闸门仍按全部行计算。</summary>
+    public IReadOnlySet<string> FilterableKeys { get; }
     public ObservableCollection<RowViewModel> Rows { get; } = new();
 
     public bool IsReadOnly { get; }

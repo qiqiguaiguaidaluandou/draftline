@@ -1,7 +1,9 @@
+using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Markup;
+using Draftline.App.Controls;
 using Draftline.App.ViewModels;
 using Draftline.Core.Enums;
 using Draftline.Core.Models;
@@ -12,6 +14,10 @@ public partial class BatchWorkView : UserControl
 {
     private bool _columnsBuilt;
 
+    // 已挂表头筛选（▼）的列：列键 + 其筛选器，供行筛选谓词逐列判定。
+    private readonly List<(string Key, ColumnFilterHeader Header)> _filters = new();
+    private ICollectionView? _view;
+
     public BatchWorkView() => InitializeComponent();
 
     // 仅负责按字段 schema 动态建列（视图职责）；行数据加载由 NavigationService 在导航时触发。
@@ -21,23 +27,60 @@ public partial class BatchWorkView : UserControl
         if (!_columnsBuilt)
         {
             BuildColumns(vm);
+
+            // 行显示筛选：只影响可见性，不改动 Rows 本身（统计/提交闸门仍按全部行）。
+            _view = CollectionViewSource.GetDefaultView(vm.Rows);
+            _view.Filter = RowPassesFilters;
+
             _columnsBuilt = true;
         }
     }
+
+    private bool RowPassesFilters(object item)
+    {
+        if (item is not RowViewModel r) return true;
+        foreach (var (key, header) in _filters)
+            if (!header.Matches(r[key])) return false;
+        return true;
+    }
+
+    private void ApplyFilters() => _view?.Refresh();
 
     /// <summary>列由字段 schema 驱动：只读字段 / 手填文本 / 手填下拉 + 行状态 + 操作（图纸不在表单内展示，到文件夹查看）。</summary>
     private void BuildColumns(BatchWorkViewModel vm)
     {
         Grid.Columns.Clear();
+        _filters.Clear();
 
         foreach (var f in vm.Fields.OrderBy(x => x.Order))
-            Grid.Columns.Add(BuildFieldColumn(f, vm.IsReadOnly));
+        {
+            var col = BuildFieldColumn(f, vm.IsReadOnly);
+            if (vm.FilterableKeys.Contains(f.Key))
+                AttachFilter(col, f, vm);
+            Grid.Columns.Add(col);
+        }
 
         Grid.Columns.Add(BuildStatusColumn());
         Grid.Columns.Add(ReadOnlyColumn("异常原因", nameof(RowViewModel.ExceptionReason), 120));
 
         if (!vm.IsReadOnly)
             Grid.Columns.Add(BuildActionColumn());
+    }
+
+    // 给列挂 Excel 风表头筛选（▼）：表头改为"列名 + ▼"，候选值在下拉打开时按当前数据实时取。
+    // 关闭该列点表头排序，避免与 ▼ 交互混淆（需求为"只要筛选"）。
+    private void AttachFilter(DataGridColumn col, FieldDefinition f, BatchWorkViewModel vm)
+    {
+        var key = f.Key;
+        var header = new ColumnFilterHeader
+        {
+            Title = f.DisplayName,
+            DistinctValuesProvider = () => vm.Rows.Select(r => r[key]),
+            ApplyRequested = ApplyFilters,
+        };
+        col.Header = header;
+        col.CanUserSort = false;
+        _filters.Add((key, header));
     }
 
     private static DataGridColumn BuildFieldColumn(FieldDefinition f, bool readOnly)
