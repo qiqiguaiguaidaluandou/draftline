@@ -488,6 +488,9 @@ public static class ApiEndpoints
         admin.MapPost("/users", async (CreateUserRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
             Results.Json(await svc.CreateUserAsync(req, ctx.GetEmployeeId(), Ip(ctx), ct)));
 
+        admin.MapDelete("/users/{employeeId}", async (string employeeId, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
+            Results.Json(await svc.DeleteUserAsync(employeeId, ctx.GetEmployeeId(), Ip(ctx), ct)));
+
         admin.MapPost("/users/{employeeId}/reset-password", async (string employeeId, ResetPasswordRequest req, IAdminService svc, HttpContext ctx, CancellationToken ct) =>
             Results.Json(await svc.ResetPasswordAsync(employeeId, req.NewPassword, ctx.GetEmployeeId(), Ip(ctx), ct)));
 

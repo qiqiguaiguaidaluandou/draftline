@@ -22,6 +22,7 @@ public static class LogText
         (LogActions.Submit, "提交回传"),
         (LogActions.Ingest, "数据导入"),
         (LogActions.AdminCreateUser, "新建用户"),
+        (LogActions.AdminDeleteUser, "删除用户"),
         (LogActions.AdminResetPassword, "重置密码"),
         (LogActions.AdminSetActive, "启用/停用用户"),
         (LogActions.AdminSetUserRoles, "分配角色"),

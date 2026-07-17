@@ -108,6 +108,71 @@ public class AdminServiceTests
     }
 
     [Fact]
+    public async Task Delete_user_removes_account_and_role_assignments_but_keeps_logs()
+    {
+        using var db = NewDb();
+        var svc = Svc(db);
+        await svc.CreateUserAsync(new CreateUserRequest { EmployeeId = "10086", DisplayName = "张三", InitialPassword = "Init@12345" }, "admin", null);
+        await svc.CreateRoleAsync(Role("核价员-组1", (FlowType.Pricing, "组1")), "admin", null);
+        var id = (await svc.ListRolesAsync()).Single().Id;
+        await svc.SetUserRolesAsync("10086", new List<int> { id }, "admin", null);
+        db.ActivityLogs.Add(new ActivityLog { Action = "Login", EmployeeId = "10086", Status = "Success", Timestamp = DateTime.UtcNow });
+        await db.SaveChangesAsync();
+
+        var r = await svc.DeleteUserAsync("10086", "admin", null);
+        Assert.True(r.Success);
+        Assert.Empty(await db.AppUsers.Where(u => u.EmployeeId == "10086").ToListAsync());
+        Assert.Empty(await db.UserRoles.Where(ur => ur.EmployeeId == "10086").ToListAsync());
+        // 角色本身与其挂载数保留（人没了，计数归零）
+        Assert.Equal(0, (await svc.ListRolesAsync()).Single().UserCount);
+        // 审计日志按工号保留，不随删人清除
+        Assert.NotEmpty(await db.ActivityLogs.Where(x => x.EmployeeId == "10086" && x.Action == "Login").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Delete_unknown_user_is_rejected()
+    {
+        using var db = NewDb();
+        Assert.False((await Svc(db).DeleteUserAsync("nope", "admin", null)).Success);
+    }
+
+    [Fact]
+    public async Task Cannot_delete_self()
+    {
+        using var db = NewDb();
+        var svc = Svc(db);
+        await svc.CreateUserAsync(new CreateUserRequest { EmployeeId = "admin", DisplayName = "管理员", InitialPassword = "Admin@12345", IsAdmin = true }, "admin", null);
+        Assert.False((await svc.DeleteUserAsync("admin", "admin", null)).Success);
+        Assert.NotEmpty(await db.AppUsers.Where(u => u.EmployeeId == "admin").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Cannot_delete_last_active_admin()
+    {
+        using var db = NewDb();
+        var svc = Svc(db);
+        await svc.CreateUserAsync(new CreateUserRequest { EmployeeId = "admin", DisplayName = "管理员", InitialPassword = "Admin@12345", IsAdmin = true }, "system", null);
+
+        // 由另一工号发起（绕开"不能删自己"），唯一管理员仍应被末位保护拦下
+        var r = await svc.DeleteUserAsync("admin", "someone-else", null);
+        Assert.False(r.Success);
+        Assert.NotEmpty(await db.AppUsers.Where(u => u.EmployeeId == "admin").ToListAsync());
+    }
+
+    [Fact]
+    public async Task Can_delete_admin_when_another_active_admin_exists()
+    {
+        using var db = NewDb();
+        var svc = Svc(db);
+        await svc.CreateUserAsync(new CreateUserRequest { EmployeeId = "a1", DisplayName = "管理员1", InitialPassword = "Admin@12345", IsAdmin = true }, "system", null);
+        await svc.CreateUserAsync(new CreateUserRequest { EmployeeId = "a2", DisplayName = "管理员2", InitialPassword = "Admin@12345", IsAdmin = true }, "system", null);
+
+        var r = await svc.DeleteUserAsync("a1", "a2", null);
+        Assert.True(r.Success);
+        Assert.Empty(await db.AppUsers.Where(u => u.EmployeeId == "a1").ToListAsync());
+    }
+
+    [Fact]
     public async Task Cannot_deactivate_self()
     {
         using var db = NewDb();

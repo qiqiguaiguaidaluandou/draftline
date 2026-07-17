@@ -15,6 +15,7 @@ public interface IAdminService
 {
     Task<List<UserSummary>> ListUsersAsync(CancellationToken ct = default);
     Task<ApiResult> CreateUserAsync(CreateUserRequest req, string actor, string? ip, CancellationToken ct = default);
+    Task<ApiResult> DeleteUserAsync(string employeeId, string actor, string? ip, CancellationToken ct = default);
     Task<ApiResult> ResetPasswordAsync(string employeeId, string newPassword, string actor, string? ip, CancellationToken ct = default);
     Task<ApiResult> SetActiveAsync(string employeeId, bool isActive, string actor, string? ip, CancellationToken ct = default);
     Task<ApiResult> SetUserRolesAsync(string employeeId, List<int> roleIds, string actor, string? ip, CancellationToken ct = default);
@@ -95,6 +96,37 @@ public sealed class AdminService : IAdminService
         Log(actor, ip, LogActions.AdminCreateUser, $"工号={empId}；管理员={(req.IsAdmin ? "是" : "否")}");
         await _db.SaveChangesAsync(ct);
         return ApiResult.Ok($"已创建用户 {empId}。");
+    }
+
+    public async Task<ApiResult> DeleteUserAsync(string employeeId, string actor, string? ip, CancellationToken ct = default)
+    {
+        // 不能删自己：删掉当前登录管理员会立刻让本次会话失效，且易误操作。停用同理由。
+        if (string.Equals(employeeId, actor, StringComparison.Ordinal))
+            return ApiResult.Fail("不能删除当前登录的管理员账号。");
+
+        var user = await _db.AppUsers.FirstOrDefaultAsync(u => u.EmployeeId == employeeId, ct);
+        if (user is null) return ApiResult.Fail("用户不存在。");
+
+        // 末位管理员保护：删除比停用更彻底，只要删掉后不再有启用的管理员就拦下，
+        // 避免没人能进后台。服务端兜底，绕过 UI(/api/admin/*) 也拦得住。
+        if (user.IsAdmin)
+        {
+            var otherActiveAdmins = await _db.AppUsers
+                .CountAsync(u => u.IsAdmin && u.IsActive && u.EmployeeId != employeeId, ct);
+            if (otherActiveAdmins == 0)
+                return ApiResult.Fail("系统至少需保留一个启用的管理员，不能删除。");
+        }
+
+        // 手动清角色指派：UserRole 仅对 RoleId 建了外键级联，对工号没有外键，
+        // 删用户不会自动带走其指派，须显式移除以免留孤儿行。
+        var assignments = await _db.UserRoles.Where(ur => ur.EmployeeId == employeeId).ToListAsync(ct);
+        _db.UserRoles.RemoveRange(assignments);
+        _db.AppUsers.Remove(user);
+
+        // 审计日志(ActivityLogs)按工号存字符串、无外键，刻意保留：删人不抹历史。
+        Log(actor, ip, LogActions.AdminDeleteUser, $"工号={employeeId}；姓名={user.DisplayName}");
+        await _db.SaveChangesAsync(ct);
+        return ApiResult.Ok($"已删除用户 {employeeId}。");
     }
 
     public async Task<ApiResult> ResetPasswordAsync(string employeeId, string newPassword, string actor, string? ip, CancellationToken ct = default)

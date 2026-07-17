@@ -47,6 +47,7 @@
                         {
                             <button disabled="@_busy" @onclick="() => SetActive(u.EmployeeId, true)">启用</button>
                         }
+                        <button class="danger" disabled="@_busy" @onclick="() => DeleteUser(u)">删除</button>
                     </td>
                 </tr>
                 @if (_rolesFor == u.EmployeeId)
@@ -240,6 +241,28 @@
             var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
             Show(await svc.ResetPasswordAsync(_resetFor, _resetPwd, _actor, null));
             _resetFor = null;
+            await Reload();
+        }
+        finally { _busy = false; }
+    }
+
+    private async Task DeleteUser(UserSummary u)
+    {
+        if (_confirm is not null
+            && !await _confirm.ShowAsync("删除用户",
+                $"确认永久删除 {u.EmployeeId}（{u.DisplayName}）？账号及其角色指派将被移除且不可恢复；如只是暂停使用，请改用“停用”。审计日志会保留。",
+                "删除", danger: true))
+            return;
+
+        _busy = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var svc = scope.ServiceProvider.GetRequiredService<IAdminService>();
+            // 删掉的行可能正处于行内编辑态，一并收起避免残留。
+            if (_rolesFor == u.EmployeeId) _rolesFor = null;
+            if (_resetFor == u.EmployeeId) _resetFor = null;
+            Show(await svc.DeleteUserAsync(u.EmployeeId, _actor, null));
             await Reload();
         }
         finally { _busy = false; }

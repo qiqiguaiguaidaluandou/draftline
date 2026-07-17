@@ -24,6 +24,7 @@ public static class LogActions
     // —— 后台管理 ——
     public const string AdminLogin = "AdminLogin";
     public const string AdminCreateUser = "AdminCreateUser";
+    public const string AdminDeleteUser = "AdminDeleteUser";
     public const string AdminResetPassword = "AdminResetPassword";
     public const string AdminSetActive = "AdminSetActive";
     public const string AdminSetUserRoles = "AdminSetUserRoles";
