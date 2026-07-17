@@ -4,8 +4,8 @@
         xmlns:fi="clr-namespace:FluentIcons.Wpf;assembly=FluentIcons.Wpf"
         Title="核价挑图工作台"
         Icon="/Assets/app-icon.png"
-        Height="800" Width="1220"
-        WindowStartupLocation="CenterScreen"
+        Height="800" Width="1220" MinHeight="560" MinWidth="900"
+        WindowStartupLocation="Manual"
         FontFamily="Microsoft YaHei" FontSize="13"
         Background="{StaticResource WindowBg}">
   <Grid>

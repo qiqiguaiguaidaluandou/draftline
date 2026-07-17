@@ -21,6 +21,10 @@ public partial class ShellWindow : Window
         _session = session;
         dialog.ToastRequested += ShowToast;
 
+        // 布局前把窗口裁到当前屏幕工作区内并居中：避免小屏（如 1366×768）下
+        // 800 高溢出、居中后顶部标题栏被推到屏幕上边界外而看不见、拖不动。
+        SourceInitialized += (_, _) => FitToWorkArea();
+
         // 初始/重置密码后首登：强制提示改密。
         Loaded += (_, _) =>
         {
@@ -30,6 +34,24 @@ public partial class ShellWindow : Window
                 ShowChangePassword();
             }
         };
+    }
+
+    /// <summary>
+    /// 把窗口尺寸裁剪到当前屏幕工作区内并居中；保证左/上边界不越界，标题栏始终可见。
+    /// 工作区已排除任务栏，单位为 WPF 逻辑像素，与 Width/Height/Left/Top 一致。
+    /// </summary>
+    private void FitToWorkArea()
+    {
+        var work = SystemParameters.WorkArea;
+
+        // 留一点边距，避免正好顶满；宽高不超过工作区，也不低于最小尺寸。
+        const double margin = 8;
+        Width = System.Math.Clamp(Width, MinWidth, System.Math.Max(MinWidth, work.Width - margin));
+        Height = System.Math.Clamp(Height, MinHeight, System.Math.Max(MinHeight, work.Height - margin));
+
+        // 在工作区内居中，并夹住左/上边界（若仍超出则贴住工作区左上角）。
+        Left = System.Math.Max(work.Left, work.Left + (work.Width - Width) / 2);
+        Top = System.Math.Max(work.Top, work.Top + (work.Height - Height) / 2);
     }
 
     /// <summary>更改密码：弹窗校验并调后端，成功后提示。</summary>
