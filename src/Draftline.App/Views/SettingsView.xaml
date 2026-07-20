@@ -22,13 +22,19 @@
           </DockPanel>
           <DockPanel Margin="0,5">
             <TextBlock DockPanel.Dock="Left" Text="本地数据根目录：" Foreground="{StaticResource TextMuted}" Width="170" />
-            <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding OpenRootCommand}">
+            <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding ChangeRootCommand}">
+              <StackPanel Orientation="Horizontal">
+                <fi:SymbolIcon Symbol="FolderArrowRight" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
+                <TextBlock Text="更改" Margin="6,0,0,0" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <Button DockPanel.Dock="Right" Style="{StaticResource BtnSubtle}" Command="{Binding OpenRootCommand}" Margin="0,0,8,0">
               <StackPanel Orientation="Horizontal">
                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="15" Foreground="{StaticResource TextSecondary}" VerticalAlignment="Center" />
                 <TextBlock Text="打开" Margin="6,0,0,0" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
-            <TextBlock Text="{Binding LocalRoot}" FontFamily="Consolas" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding LocalRoot}" FontFamily="Consolas" VerticalAlignment="Center" TextWrapping="Wrap" />
           </DockPanel>
           <DockPanel Margin="0,5">
             <TextBlock DockPanel.Dock="Left" Text="客户端版本：" Foreground="{StaticResource TextMuted}" Width="170" />

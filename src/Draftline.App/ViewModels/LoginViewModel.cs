@@ -59,7 +59,8 @@ public sealed partial class LoginViewModel : ObservableObject
             }
 
             // 取下发配置，应用字段集。本地数据根不在下发内容里——它是纯客户端概念，
-            // 由 App 启动时的 LocalStorageOptions（我的文档\Draftline_Data）统一决定。
+            // 由 App 启动时的 LocalStorageOptions 统一决定（默认我的文档\Draftline_Data，
+            // 或用户在本机自定义的路径，见 App.ResolveLocalRoot / 设置页）。
             var config = await _config.GetConfigAsync(auth.Operator.EmployeeId);
             _fieldProvider.Apply(config);
             _session.SignIn(auth.Operator, config, auth.MustChangePassword);

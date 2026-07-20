@@ -19,6 +19,9 @@ public static class DependencyInjection
         services.AddSingleton(http);
         services.AddSingleton(new LocalStorageOptions { Root = http.LocalRoot });
 
+        // 本机设置（数据根等），持久化在 %AppData%\Draftline；设置页更改路径时用它。
+        services.AddSingleton<IClientSettingsStore, ClientSettingsStore>();
+
         // 字段提供者：默认 schema，登录后被下发 ClientConfig 覆盖（DefaultFieldProvider.Apply）——机制同 Mock 模式。
         services.AddSingleton<DefaultFieldProvider>();
         services.AddSingleton<IFieldProvider>(sp => sp.GetRequiredService<DefaultFieldProvider>());

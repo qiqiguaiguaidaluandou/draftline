@@ -2,6 +2,7 @@ using System.Reflection;
 using CommunityToolkit.Mvvm.Input;
 using Draftline.App.Services;
 using Draftline.Infrastructure.Options;
+using Draftline.Infrastructure.Storage;
 
 namespace Draftline.App.ViewModels;
 
@@ -13,12 +14,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private readonly IExplorerService _explorer;
     private readonly IDialogService _dialog;
     private readonly IUpdateService _update;
+    private readonly IClientSettingsStore _settings;
 
-    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog, IUpdateService update, LocalStorageOptions storage)
+    public SettingsViewModel(ISession session, IExplorerService explorer, IDialogService dialog, IUpdateService update, LocalStorageOptions storage, IClientSettingsStore settings)
     {
         _explorer = explorer;
         _dialog = dialog;
         _update = update;
+        _settings = settings;
 
         Title = "设置";
         var op = session.Operator;
@@ -36,6 +39,40 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenRoot() => _explorer.OpenFolder(LocalRoot);
+
+    /// <summary>
+    /// 更改本地数据根：选父目录 → 确认 → 记下"新根 + 待迁移旧根" → 重启后由启动流程完成迁移并生效。
+    /// 迁移放到重启后做，避开当前会话的同步/文件句柄，最安全。
+    /// </summary>
+    [RelayCommand]
+    private void ChangeRoot()
+    {
+        // 定位到当前根的上一级，方便用户就近选。
+        var picked = _explorer.PickFolder(System.IO.Path.GetDirectoryName(LocalRoot));
+        if (picked is null) return;
+
+        var newRoot = LocalRootResolver.RootUnder(picked);
+        if (string.Equals(
+                System.IO.Path.GetFullPath(newRoot).TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                System.IO.Path.GetFullPath(LocalRoot).TrimEnd(System.IO.Path.DirectorySeparatorChar),
+                System.StringComparison.OrdinalIgnoreCase))
+        {
+            _dialog.Info("所选位置与当前一致，未更改。");
+            return;
+        }
+
+        if (!_dialog.Confirm("更改数据存放位置",
+                $"数据根目录将更改为：\n{newRoot}\n\n现有数据会迁移到新位置，程序需要重启后生效。是否继续？"))
+            return;
+
+        var s = _settings.Load();
+        s.PendingMoveFrom = LocalRoot;   // 旧根待迁移
+        s.LocalRoot = newRoot;           // 新根从下次启动起生效
+        _settings.Save(s);
+
+        if (_dialog.Confirm("需要重启", "设置已保存。是否立即重启程序以完成迁移并生效？"))
+            App.Restart();
+    }
 
     [RelayCommand]
     private void CheckUpdate()

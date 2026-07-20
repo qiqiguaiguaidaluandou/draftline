@@ -13,6 +13,9 @@ public interface IExplorerService
 
     /// <summary>用系统默认关联程序打开文件（PDF 阅读器 / CAD）。</summary>
     void OpenFile(string path);
+
+    /// <summary>弹出系统"选择文件夹"对话框；取消返回 null。initialDir 为初始定位目录。</summary>
+    string? PickFolder(string? initialDir = null);
 }
 
 public sealed class ExplorerService : IExplorerService
@@ -27,5 +30,13 @@ public sealed class ExplorerService : IExplorerService
     {
         if (!File.Exists(path)) return;
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+    }
+
+    public string? PickFolder(string? initialDir = null)
+    {
+        var dlg = new Microsoft.Win32.OpenFolderDialog { Title = "选择数据存放位置" };
+        if (!string.IsNullOrWhiteSpace(initialDir) && Directory.Exists(initialDir))
+            dlg.InitialDirectory = initialDir;
+        return dlg.ShowDialog() == true ? dlg.FolderName : null;
     }
 }
